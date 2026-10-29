@@ -11,8 +11,10 @@
     <h1 id="title">Gala Manager</h1>
     <span id="conn" class="pill bad">Desconnectat</span>
     <span id="overlay-state" class="pill"></span>
+    <button id="btn-preflight" title="Comprovació abans de començar">✔ Tot a punt?</button>
     <span id="clock"></span>
   </header>
+  <div id="rehearsal-banner" class="hidden">MODE ASSAIG – el que feu ara no toca l'estat de la gala</div>
   <div id="alerts"></div>
   <div id="recovered" class="banner hidden">
     Sessió recuperada després d'un tancament. Comprova la cue actual i continua amb GO o salta on calgui.
@@ -128,15 +130,33 @@
         <ul id="media-errors"></ul>
       </div>
       <div class="card">
-        <div class="label">SESSIÓ</div>
+        <div class="label">SESSIÓ – <span id="mode-label">GALA</span></div>
         <div class="buttons">
           <button id="btn-reload">Recarregar guió</button>
+          <button id="btn-diplomas" title="Diplomes per imprimir (A4) a partir de les mencions">🖨 Diplomes</button>
           <button id="btn-reset" class="danger">Nova sessió (esborra l'estat)</button>
         </div>
+        <div class="buttons">
+          <button id="btn-rehearsal">🎭 Començar assaig</button>
+          <button id="btn-rehearsal-new" class="hidden">Nou assaig (de zero)</button>
+          <button id="btn-gala" class="hidden">Tornar a la gala</button>
+        </div>
+        <p class="hint" id="mode-hint">L'assaig fa servir un diari a part: en tornar a la gala, la gala és on era.</p>
       </div>
     </section>
   </main>
   <div id="toasts"></div>
+  <dialog id="preflight-dialog">
+    <h2>Tot a punt?</h2>
+    <ul id="preflight-list"></ul>
+    <div class="buttons">
+      <button id="btn-test-sound">🔊 Prova de so al projector</button>
+      <button id="btn-test-pattern">▦ Patró de prova</button>
+      <button id="btn-test-off">Treure prova</button>
+      <button id="btn-preflight-again">↻ Tornar a comprovar</button>
+      <button id="btn-preflight-close">Tancar</button>
+    </div>
+  </dialog>
   <dialog id="qr-dialog"><img id="qr-dialog-img" alt=""><p id="qr-dialog-text"></p><button id="qr-dialog-close">Tancar</button></dialog>
   <script src="/static/common/client.js"></script>
   <script src="/static/control/control.js"></script>

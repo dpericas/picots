@@ -143,6 +143,7 @@
     document.title = s.title + ' – Presentador';
     $('locked').classList.toggle('hidden', s.enabled);
     $('paused').classList.toggle('hidden', !s.paused);
+    $('rehearsal').classList.toggle('hidden', s.mode !== 'assaig');
     const ov = { black: 'PANTALLA NEGRA', hold: 'PANTALLA D\'ESPERA' }[s.overlay];
     $('overlay').textContent = ov || '';
     $('overlay').classList.toggle('hidden', !ov);

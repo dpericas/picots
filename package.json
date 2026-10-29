@@ -10,6 +10,7 @@
     "dev-server": "node scripts/dev-server.js",
     "sample-media": "node scripts/make-sample-media.js",
     "simulate": "node scripts/simulate-phones.js",
+    "entry-videos": "node scripts/make-entry-videos.js",
     "test": "node --test test/",
     "dist:win": "electron-builder --win zip --x64"
   },

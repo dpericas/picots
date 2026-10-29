@@ -53,6 +53,8 @@
         delete this.pending[msg.id];
         clearTimeout(p.timer);
         p.resolve(msg);
+      } else if (this.opts.onMessage) {
+        this.opts.onMessage(msg);
       }
     };
     ws.onclose = (e) => {

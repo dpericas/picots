@@ -289,3 +289,104 @@ test('Servidor: qüestionari, repte i mur des dels mòbils', async () => {
     fs.rmSync(t.root, { recursive: true, force: true });
   }
 });
+
+test('Servidor: mode assaig amb diari a part, comprovació prèvia i proves al projector', async () => {
+  const t = tmpShow();
+  let srv = await startServer({
+    showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet,
+    systemInfo: () => ({ displays: [{ n: 1, name: '1 · Portàtil', projector: true }], projectorExternal: false }),
+  });
+  try {
+    const control = await connect(srv.port, 'role=control');
+    const screen = await connect(srv.port, 'role=screen');
+    const phone = await connect(srv.port, 'role=play&device=dev1');
+    assert.ok((await phone.cmd({ name: 'claim', participantId: 'a' })).ok);
+    assert.ok((await control.cmd({ name: 'jump', cueId: 'v1' })).ok);
+
+    // A l'assaig: estat nou, però el mòbil conserva el nom.
+    assert.ok((await control.cmd({ name: 'mode.set', mode: 'assaig', fresh: true })).ok);
+    let cs = await control.until((s) => s.mode === 'assaig');
+    assert.strictEqual(cs.state.started, false);
+    await screen.until((s) => s.mode === 'assaig');
+    await phone.until((s) => s.me === 'a');
+    assert.ok((await control.cmd({ name: 'go' })).ok);
+    assert.ok(fs.existsSync(path.join(t.dataDir, 'assaig.jsonl')));
+
+    // Comprovació: mode assaig = error; projector a la pantalla principal = avís.
+    const pf = await control.cmd({ name: 'preflight' });
+    const byId = Object.fromEntries(pf.report.items.map((i) => [i.id, i]));
+    assert.strictEqual(byId.mode.level, 'error');
+    assert.strictEqual(byId.displays.level, 'warn');
+    assert.strictEqual(byId.projector.level, 'ok');
+    assert.strictEqual(byId.media.level, 'error', 'el vídeo de prova no és un MP4 de debò');
+    assert.match(byId.phones.title, /1 de 2/);
+
+    // El projector rep les proves.
+    const got = new Promise((resolve) => screen.ws.on('message', (d) => {
+      const m = JSON.parse(String(d));
+      if (m.type === 'test') resolve(m.what);
+    }));
+    assert.ok((await control.cmd({ name: 'screen.test', what: 'sound' })).ok);
+    assert.strictEqual(await got, 'sound');
+
+    // Una caiguda durant l'assaig torna a l'assaig.
+    await srv.close();
+    srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet });
+    assert.strictEqual(srv.mode, 'assaig');
+    assert.strictEqual(srv.engine.state.cueId, 'intro');
+    const control2 = await connect(srv.port, 'role=control');
+    // De tornada a la gala, la gala és on era.
+    assert.ok((await control2.cmd({ name: 'mode.set', mode: 'gala' })).ok);
+    cs = await control2.until((s) => s.mode === 'gala');
+    assert.strictEqual(cs.state.cueId, 'v1');
+    assert.strictEqual(srv.engine.state.claims.a, 'dev1');
+    assert.ok(!fs.existsSync(path.join(t.dataDir, 'mode.json')));
+  } finally {
+    await srv.close();
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});
+
+test('preflight.inspectMp4: detecta faststart', () => {
+  const { inspectMp4 } = require('../src/server/preflight');
+  const box = (type, len) => {
+    const b = Buffer.alloc(len);
+    b.writeUInt32BE(len, 0);
+    b.write(type, 4, 'latin1');
+    return b;
+  };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gala-mp4-'));
+  try {
+    const fast = path.join(dir, 'fast.mp4');
+    const slow = path.join(dir, 'slow.mp4');
+    fs.writeFileSync(fast, Buffer.concat([box('ftyp', 16), box('moov', 40), box('mdat', 100)]));
+    fs.writeFileSync(slow, Buffer.concat([box('ftyp', 16), box('mdat', 100), box('moov', 40)]));
+    assert.deepStrictEqual(inspectMp4(fast), { mp4: true, moov: true, faststart: true });
+    assert.deepStrictEqual(inspectMp4(slow), { mp4: true, moov: true, faststart: false });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Servidor: pàgina de diplomes', async () => {
+  const t = tmpShow();
+  fs.writeFileSync(path.join(t.showDir, 'show.yaml'), SHOW.replace('{ id: a, nom: A }', '{ id: a, nom: "A<b>", mencio: "La <més> riallera" }') + `
+  - id: m
+    tipus: mencions
+    diploma: { titol: Premi, signatures: [Tutora] }
+`);
+  const srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet });
+  try {
+    const r = await get(srv.port, '/diplomes');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual((r.body.match(/class="page"/g) || []).length, 2);
+    assert.ok(r.body.includes('A&lt;b&gt;'), 'els noms s\'escapen');
+    assert.ok(r.body.includes('La &lt;més&gt; riallera'));
+    assert.ok(r.body.includes('>Premi<'));
+    assert.ok(r.body.includes('>Tutora<'));
+    assert.strictEqual((await get(srv.port, '/diplomes?cue=nope')).status, 404);
+  } finally {
+    await srv.close();
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});

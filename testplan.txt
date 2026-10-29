@@ -1,7 +1,8 @@
-PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador; cicle 6: qüestionari, repte, mencions i mur)
+PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador; cicle 6: qüestionari, repte, mencions i mur; cicle 7: eines de preparació, assaig i pantalles)
 ================================================
 
-Proves automàtiques: `npm test` (46 tests: motor, guió, servidor i les cues interactives). Aquest pla cobreix
+Proves automàtiques: `npm test` (53 tests: motor, guió, servidor, cues interactives, generador
+de vídeos, assaig, comprovació prèvia i diplomes). Aquest pla cobreix
 el que els tests no poden verificar (pantalles reals, xarxa, Windows) i, per a cada
 àrea automatitzada, només la prova manual mínima que la confirma en condicions reals.
 
@@ -241,3 +242,58 @@ Expected Result: (1) Al mòbil «pendent de revisar»; el quart es rebutja («Ja
          El dibuix es veu bé al panell (miniatura). (2) Només els aprovats surten a la
          pantalla, amb animació; en treure'n un desapareix; el mòbil n'actualitza l'estat.
          (3) Error 403: els dibuixos no aprovats no es poden veure des de fora.
+
+------------------------------------------------------------------------------
+T23 – Generador dels vídeos d'entrada amb fotos reals
+Purpose: Verificar el muntatge amb fotos reals de mòbil (verticals, horitzontals, girades), la
+         música i l'actualització del guió.
+Method:  1. fonts-entrada/<id>/ per a 3 nens: 10–20 fotos reals (numerades), una cançó; a un
+            d'ells, config.yaml amb inici: 30 i durada: 25.
+         2. npm run entry-videos -- --actualitza-guio
+         3. Tornar-ho a executar sense canviar res; després canviar una foto d'un nen.
+         4. Recarregar el guió i passar l'entrada triomfal.
+Expected Result: (2) Un MP4 per nen a show/media/entrada amb la durada demanada (±1 s), fotos
+         ben orientades i senceres, transicions suaus, música des del segon indicat, amb fos final
+         i volum semblant entre nens; show.yaml té video_entrada (comentaris intactes, còpia .bak).
+         (3) Primer «ja està fet i al dia»; després només es refà el nen canviat.
+         (4) Els vídeos es veuen sense talls i amb el nom a sota.
+
+------------------------------------------------------------------------------
+T24 – Triar i identificar la pantalla del projector
+Purpose: Verificar la tria de pantalla amb el projector real i que es recorda.
+Method:  1. Portàtil + projector (mode «Ampliar»). Menú Projector › Identificar pantalles.
+         2. Projector › Pantalla del projector › triar la del portàtil; després la del projector.
+         3. Tancar i obrir l'app. Desconnectar i tornar a connectar el cable del projector.
+Expected Result: (1) Un número gran a cada pantalla, igual que al menú; la del projector en verd.
+         (2) El projector es mou a la pantalla triada, a pantalla completa. (3) En obrir l'app i
+         en reconnectar el cable, el projector torna a la pantalla triada.
+
+------------------------------------------------------------------------------
+T25 – Tot a punt? i proves de so i imatge
+Purpose: Verificar que la comprovació prèvia detecta els problemes típics del dia de la gala.
+Method:  1. Amb tot correcte: ✔ Tot a punt?
+         2. Provocar problemes: canviar el nom d'un vídeo, desendollar el portàtil, posar el projector
+            a la pantalla principal, entrar en mode assaig, fer GO a la gala.
+         3. Prova de so i patró de prova.
+Expected Result: (1) Tot en verd (o avisos esperats: mòbils no connectats). (2) Cada problema surt
+         com a error o avís amb què cal fer. (3) Tres tons pels altaveus de la sala; el patró ocupa
+         tota la projecció (vores i cercle sense retallar) i mostra la resolució real.
+
+------------------------------------------------------------------------------
+T26 – Mode assaig
+Purpose: Verificar que un assaig no altera la gala i que es pot repetir.
+Method:  1. A la gala, anar a la cue 3. 🎭 Començar assaig: recórrer diverses cues i una votació
+            amb mòbils.
+         2. Tancar l'app i tornar-la a obrir. 3. Nou assaig. 4. Tornar a la gala.
+Expected Result: (1) Franja «MODE ASSAIG» al panell, etiqueta «ASSAIG» al projector i al
+         comandament; l'assaig comença de zero i els mòbils conserven el nom. (2) Continua en
+         mode assaig on era. (3) Torna a començar de zero (l'anterior arxivat a dades/).
+         (4) La gala és a la cue 3, amb els vots que tenia.
+
+------------------------------------------------------------------------------
+T27 – Diplomes impresos
+Purpose: Verificar el PDF dels diplomes i la impressió real.
+Method:  1. Menú Gala › Exportar diplomes a PDF… 2. Imprimir-ne un en color a la impressora
+            que es farà servir (A4, sense ajustar a la pàgina).
+Expected Result: Una pàgina A4 apaïsada per nen, en l'ordre de la cue, amb foto, nom, menció,
+         peu i signatures; cap text tallat. La impressió conserva el marc daurat i els marges.

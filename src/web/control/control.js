@@ -114,6 +114,51 @@
     if (r.ok) toast('Guió recarregat', 'info');
   });
   armed($('btn-reset'), () => send({ name: 'session.reset' }));
+  armed($('btn-rehearsal'), () => send({ name: 'mode.set', mode: 'assaig', fresh: true }));
+  armed($('btn-rehearsal-new'), () => send({ name: 'mode.set', mode: 'assaig', fresh: true }));
+  armed($('btn-gala'), () => send({ name: 'mode.set', mode: 'gala' }));
+
+  // --- Comprovació prèvia ---
+  const ICON = { ok: '✅', warn: '⚠️', error: '❌' };
+  async function batteryItem() {
+    if (!navigator.getBattery) return null;
+    try {
+      const b = await navigator.getBattery();
+      const pct = Math.round(b.level * 100);
+      if (b.charging || b.level === 1) return { level: 'ok', title: 'Portàtil endollat (' + pct + '%)', detail: '' };
+      return {
+        level: 'error', title: 'El portàtil va amb BATERIA (' + pct + '%)',
+        detail: 'Endolla\'l: la gala dura hores i la bateria pot reduir el rendiment.',
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+  async function preflight() {
+    const list = $('preflight-list');
+    list.textContent = '';
+    list.append(el('li', { class: 'hint', text: 'Comprovant…' }));
+    if (!$('preflight-dialog').open) $('preflight-dialog').showModal();
+    const r = await send({ name: 'preflight' });
+    if (!r.ok) return;
+    const items = r.report.items.slice();
+    const bat = await batteryItem();
+    if (bat) items.push(bat);
+    const rank = { error: 0, warn: 1, ok: 2 };
+    items.sort((a, b) => rank[a.level] - rank[b.level]);
+    list.textContent = '';
+    items.forEach((it) => list.append(el('li', { class: it.level }, [
+      el('div', { class: 't', text: ICON[it.level] + ' ' + it.title }),
+      it.detail ? el('div', { class: 'd', text: it.detail }) : null,
+    ])));
+  }
+  $('btn-preflight').addEventListener('click', preflight);
+  $('btn-diplomas').addEventListener('click', () => window.open('/diplomes' + (pin ? '?pin=' + encodeURIComponent(pin) : ''), '_blank'));
+  $('btn-preflight-again').addEventListener('click', preflight);
+  $('btn-preflight-close').addEventListener('click', () => $('preflight-dialog').close());
+  $('btn-test-sound').addEventListener('click', () => send({ name: 'screen.test', what: 'sound' }));
+  $('btn-test-pattern').addEventListener('click', () => send({ name: 'screen.test', what: 'pattern' }));
+  $('btn-test-off').addEventListener('click', () => send({ name: 'screen.test', what: 'off' }));
   $('recovered-ok').addEventListener('click', () => {
     recoveredDismissed = true;
     $('recovered').classList.add('hidden');
@@ -427,8 +472,18 @@
     updateTimer();
   }, 250);
 
+  function renderMode() {
+    const rehearsal = state.mode === 'assaig';
+    $('rehearsal-banner').classList.toggle('hidden', !rehearsal);
+    $('mode-label').textContent = rehearsal ? 'ASSAIG' : 'GALA';
+    $('btn-rehearsal').classList.toggle('hidden', rehearsal);
+    $('btn-rehearsal-new').classList.toggle('hidden', !rehearsal);
+    $('btn-gala').classList.toggle('hidden', !rehearsal);
+  }
+
   function render() {
     $('title').textContent = state.title + ' – Control';
+    renderMode();
     renderRundown();
     renderNow();
     renderVote();

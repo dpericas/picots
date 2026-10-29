@@ -194,6 +194,7 @@ function screenView(engine, extra) {
     resume: engine.resume,
     preload: preloadSources(engine),
     joinUrl: extra.joinUrl,
+    mode: extra.mode || 'gala',
   };
 }
 
@@ -319,6 +320,7 @@ function remoteView(engine, extra) {
     title: engine.show.title,
     navSeq: s.navSeq || 0,
     enabled: extra.enabled,
+    mode: extra.mode || 'gala',
     started: s.started,
     ended: s.ended,
     paused: s.paused,
@@ -417,6 +419,7 @@ function controlView(engine, extra) {
     clients: extra.clients,
     mediaErrors: extra.mediaErrors,
     joinUrl: extra.joinUrl,
+    mode: extra.mode || 'gala',
   };
 }
 

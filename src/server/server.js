@@ -16,13 +16,20 @@ const { loadShow, hasErrors } = require('../engine/show');
 const { screenView, playView, controlView, remoteView } = require('../engine/views');
 const { safeResolve, serveFile, sendError } = require('./static');
 const { pickLanAddress, isLoopback } = require('./net');
+const { runPreflight } = require('./preflight');
+const { renderDiplomas } = require('./diplomas');
 
 const WEB_DIR = path.join(__dirname, '..', 'web');
 const PAGES = { '/screen': 'screen', '/control': 'control', '/play': 'play', '/remote': 'remote' };
 const ROLE_COMMANDS = {
   play: ['claim', 'ballot', 'release', 'answer', 'tap', 'wall.post'],
   remote: ['go', 'back', 'remote.alert'],
-  screen: ['video.ended', 'video.position', 'media.error'],
+  screen: ['video.ended', 'video.position', 'media.error', 'screen.info'],
+};
+// Cada mode té el seu diari: un assaig no toca mai l'estat de la gala.
+const MODES = {
+  gala: { journal: 'journal.jsonl', position: 'position.json' },
+  assaig: { journal: 'assaig.jsonl', position: 'position-assaig.json' },
 };
 const POSITION_SAVE_MS = 2000;
 const HEARTBEAT_MS = 10000;
@@ -75,18 +82,12 @@ async function startServer(opts) {
 
   const secret = readSecret(dataDir);
   const keyFor = (pid) => crypto.createHmac('sha256', secret).update(pid).digest('hex').slice(0, 12);
-  const positionFile = path.join(dataDir, 'position.json');
-  const journal = new FileJournal(path.join(dataDir, 'journal.jsonl'), log);
-  const engine = new Engine({
-    show: loaded.show,
-    journal,
-    keyFor,
-    position: readJson(positionFile),
-  });
-  engine.on('warning', (msg) => log.warn(msg));
-  if (engine.recovered) {
-    log.warn('Sessió recuperada del diari: cue actual "' + engine.state.cueId + '", event ' + engine.state.seq + '.');
-  }
+  const modeFile = path.join(dataDir, 'mode.json');
+  let mode = (readJson(modeFile) || {}).mode === 'assaig' ? 'assaig' : 'gala';
+  let show = loaded.show;
+  let journal = null;
+  let engine = null;
+  let positionFile = null;
 
   const network = loaded.show.network;
   const port = opts.port != null ? opts.port : network.port;
@@ -118,11 +119,11 @@ async function startServer(opts) {
   }
 
   function viewFor(client) {
-    if (client.role === 'screen') return screenView(engine, { joinUrl: joinUrl() });
-    if (client.role === 'remote') return remoteView(engine, { enabled: remote.enabled });
+    if (client.role === 'screen') return screenView(engine, { joinUrl: joinUrl(), mode });
+    if (client.role === 'remote') return remoteView(engine, { enabled: remote.enabled, mode });
     if (client.role === 'play') return playView(engine, client.deviceId);
     return controlView(engine, {
-      joinUrl: joinUrl(), personalUrl, problems, clients: clientList(), mediaErrors, remote: remoteInfo(),
+      joinUrl: joinUrl(), personalUrl, problems, clients: clientList(), mediaErrors, remote: remoteInfo(), mode,
     });
   }
 
@@ -141,18 +142,59 @@ async function startServer(opts) {
     });
   }
 
-  engine.on('change', (ev) => {
-    if (ev && !QUIET_EVENTS.includes(ev.type)) log.info('Event ' + ev.seq + ': ' + ev.type + summarize(ev));
-    broadcast();
-  });
   let liveTimer = null;
-  engine.on('live', () => {
+  function onLive() {
     if (liveTimer) return;
     liveTimer = setTimeout(() => {
       liveTimer = null;
       broadcast();
     }, LIVE_MS);
-  });
+  }
+
+  function openEngine(m) {
+    const files = MODES[m];
+    positionFile = path.join(dataDir, files.position);
+    journal = new FileJournal(path.join(dataDir, files.journal), log);
+    const e = new Engine({ show, journal, keyFor, position: readJson(positionFile) });
+    e.on('warning', (msg) => log.warn(msg));
+    e.on('change', (ev) => {
+      if (ev && !QUIET_EVENTS.includes(ev.type)) log.info('Event ' + ev.seq + ': ' + ev.type + summarize(ev));
+      broadcast();
+    });
+    e.on('live', onLive);
+    if (e.recovered) {
+      log.warn('Sessió de ' + m + ' recuperada del diari: cue actual "' + e.state.cueId + '", event ' + e.state.seq + '.');
+    }
+    return e;
+  }
+  engine = openEngine(mode);
+
+  // Canvia entre gala i assaig. Els mòbils que ja tenien nom el conserven.
+  function switchMode(target, fresh) {
+    const claims = Object.assign({}, engine.state.claims);
+    engine.dispose();
+    engine.removeAllListeners();
+    journal.close();
+    mode = target;
+    try {
+      if (mode === 'gala') fs.rmSync(modeFile, { force: true });
+      else fs.writeFileSync(modeFile, JSON.stringify({ mode }));
+    } catch (err) {
+      log.warn('No es pot desar el mode: ' + err.message);
+    }
+    engine = openEngine(mode);
+    if (fresh) {
+      const archived = engine.reset(fileStamp());
+      if (archived) log.info('Assaig anterior arxivat: ' + archived);
+    }
+    Object.keys(claims).forEach((pid) => {
+      if (!engine.state.claims[pid]) engine.dispatch({ name: 'claim', deviceId: claims[pid], participantId: pid, key: keyFor(pid) });
+    });
+    lastSavedPosition = null;
+    mediaErrors.length = 0;
+    log.warn(mode === 'assaig' ? 'MODE ASSAIG' + (fresh ? ' (de zero)' : '') : 'Tornada al mode GALA');
+    broadcast();
+  }
 
   // Desa la posició del vídeo periòdicament per poder reprendre després d'una caiguda.
   let lastSavedPosition = null;
@@ -176,6 +218,7 @@ async function startServer(opts) {
         return { ok: false, error: 'El guió té errors; es manté la versió anterior.', problems: r.problems };
       }
       problems = r.problems;
+      show = r.show;
       engine.setShow(r.show);
       log.info('Guió recarregat (' + r.show.cues.length + ' cues).');
       return { ok: true };
@@ -189,6 +232,28 @@ async function startServer(opts) {
     if (cmd.name === 'alert.dismiss') {
       remote.alerts = cmd.id == null ? [] : remote.alerts.filter((a) => a.id !== cmd.id);
       broadcast();
+      return { ok: true };
+    }
+    if (cmd.name === 'mode.set') {
+      if (!MODES[cmd.mode]) return { ok: false, error: 'Mode desconegut.' };
+      if (cmd.mode === mode && !cmd.fresh) return { ok: true };
+      switchMode(cmd.mode, cmd.mode === 'assaig' && !!cmd.fresh);
+      return { ok: true };
+    }
+    if (cmd.name === 'preflight') {
+      return {
+        ok: true,
+        report: runPreflight({
+          show, problems, showDir, dataDir, engine, mode, joinUrl: joinUrl(), presenterPin,
+          clients: Array.from(clients), system: opts.systemInfo ? opts.systemInfo() : null,
+        }),
+      };
+    }
+    if (cmd.name === 'screen.test') {
+      const what = ['sound', 'pattern', 'off'].includes(cmd.what) ? cmd.what : 'off';
+      const screens = Array.from(clients).filter((c) => c.role === 'screen');
+      if (screens.length === 0) return { ok: false, error: 'No hi ha cap projector connectat.' };
+      screens.forEach((c) => send(c, { type: 'test', what }));
       return { ok: true };
     }
     if (cmd.name === 'session.reset') {
@@ -219,6 +284,13 @@ async function startServer(opts) {
       }
       if (!remote.enabled) return { ok: false, error: 'El tècnic ha bloquejat el comandament.' };
       log.info('Presentador: ' + cmd.name);
+    }
+    if (cmd.name === 'screen.info') {
+      client.info = {
+        width: Number(cmd.width) || 0, height: Number(cmd.height) || 0,
+        dpr: Number(cmd.dpr) || 1, fullscreen: !!cmd.fullscreen,
+      };
+      return null;
     }
     if (cmd.name === 'video.position') {
       engine.setPosition(cmd);
@@ -254,6 +326,15 @@ async function startServer(opts) {
     if (p.startsWith('/show/')) {
       const file = safeResolve(showDir, p.slice('/show/'.length));
       return file ? serveFile(req, res, file, { cache: true }) : sendError(res, 404);
+    }
+    if (p === '/diplomes') {
+      // Com el panell: des d'aquest ordinador o amb el PIN de control.
+      if (!isLoopback(req.socket.remoteAddress) && !(controlPin && url.searchParams.get('pin') === controlPin)) {
+        return sendError(res, 403);
+      }
+      const r = renderDiplomas(show, url.searchParams.get('cue'));
+      res.writeHead(r.status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(r.html);
     }
     if (p.startsWith('/api/mur/')) return serveDrawing(req, res, Number(p.slice('/api/mur/'.length)));
     if (p === '/api/qr.svg') {
@@ -374,7 +455,8 @@ async function startServer(opts) {
     port: actualPort,
     localUrl: 'http://127.0.0.1:' + actualPort,
     joinUrl,
-    engine,
+    get engine() { return engine; },
+    get mode() { return mode; },
     showDir,
     dataDir,
     close,

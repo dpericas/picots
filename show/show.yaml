@@ -22,7 +22,8 @@
 #                si_exit (cue si el superen, obligatori), si_no (si no; per defecte la de sota), text, musica.
 #   mencions     diplomes: GO passa nen a nen (foto, nom i menció) i al final mosaic. La menció surt de
 #                "mencio" de cada participant o de mencions: {id: text} de la cue. text, text_final,
-#                musica, efecte, ordre (com l'entrada).
+#                musica, efecte, ordre (com l'entrada). diploma: {titol, text, peu, data, signatures}
+#                per als diplomes impresos (A4) que es generen amb les mateixes mencions.
 #   mur          mur de missatges i dibuixos des dels mòbils. text (consigna), moderacio (true: el tècnic
 #                aprova cada missatge abans que surti), dibuixos (true), maxim_per_nen (3), musica.
 # Comuns: id (obligatori), titol, seguent (si no, la de sota), notes (només al panell del tècnic),
@@ -174,6 +175,13 @@ cues:
     text_final: "Felicitats, Picots!"
     efecte: media/so/entrada.mp3
     guio: "Digues el nom i la menció; el nen surt a recollir el diploma. GO per al següent."
+    # Diploma imprès (panell › 🖨 Diplomes, o menú Gala › Exportar diplomes a PDF)
+    diploma:
+      titol: Diploma
+      text: "s'atorga a"
+      peu: "Gala Picots 2027 · Escola"
+      data: "Juny de 2027"
+      signatures: ["La tutora", "La direcció"]
 
   - id: mur
     tipus: mur

@@ -72,6 +72,29 @@ El panell marca amb 🎬 els nens que tenen vídeo.
 Durada: amb 23 nens i la franja de 20 minuts del planning (17:05–17:25) hi ha uns 50 s per nen,
 comptant el temps de dir el nom i caminar. Recomanació: vídeos d'entrada de 25–35 s.
 
+#### Generador dels vídeos d'entrada
+
+Munta tots els vídeos d'una vegada a partir de les fotos i la cançó de cada nen (cal ffmpeg 5+):
+
+```
+fonts-entrada/            (al costat de show/; no es copia al portàtil de la gala)
+  anna/01.jpg 02.jpg …    fotos per ordre de nom: numera-les (01, 02…)
+  anna/canco.mp3          la seva cançó (mp3, m4a, wav…)
+  anna/config.yaml        opcional:  inici: 45  (segon de la cançó)  durada: 28
+```
+
+```bash
+npm run entry-videos -- --actualitza-guio            # tots (només els que han canviat)
+npm run entry-videos -- --nomes=anna,biel --refes    # tornar a fer-ne alguns
+npm run entry-videos -- --res=1280x720 --durada=25   # més ràpid / més curt
+```
+
+Cada foto surt sencera (les verticals, sobre un fons difuminat d'ella mateixa) amb un zoom lent,
+amb transicions variades, i la música amb fos d'entrada i de sortida i el volum igualat entre
+tots els nens. Les fotos del mòbil es giren soles. Els vídeos es desen a `show/media/entrada/<id>.mp4`
+i `--actualitza-guio` posa `video_entrada` a cada nen (en deixa còpia a `show.yaml.bak`).
+Temps orientatiu en aquest PC: uns 4 s per vídeo de 12 s a 720p.
+
 ### Qüestionari
 
 Preguntes tipus Kahoot sobre records de l'escola (`questionari`). Cada pregunta té 2–4 opcions,
@@ -99,6 +122,10 @@ perd com a molt l'últim segon). Referència: 23 nens a ~6 tocs/s fan uns 140 to
 `mencions` funciona com l'entrada triomfal (GO nen a nen i mosaic final) però en daurat, amb
 la menció de cada nen a sota del nom. La menció es posa a `mencio` de cada participant o al
 mapa `mencions: {id: text}` de la cue (té preferència). El panell avisa dels nens sense menció.
+
+**Diplomes impresos:** amb les mateixes mencions, un diploma A4 apaïsat per nen (foto, nom,
+menció, peu i línies de signatura; textos a `diploma:` de la cue). Menú **Gala › Exportar
+diplomes a PDF…**, o botó **🖨 Diplomes** del panell (s'obre la pàgina i es pot imprimir).
 
 ### Mur de missatges
 
@@ -139,8 +166,32 @@ npx electron scripts/check-transitions.js --scenario=parade   # entrada amb víd
 | Esc | Treure pantalla negra / espera |
 | Doble clic a l'escaleta | Saltar a qualsevol cue |
 
-Menú **Projector**: moure'l a una altra pantalla (Ctrl+Shift+M), pantalla completa
-(Ctrl+Shift+F) i recarregar-lo (Ctrl+Shift+R).
+Menú **Projector**:
+- **Pantalla del projector**: llista de pantalles connectades (número · nom · resolució) per triar
+  on va el projector, o «Automàtica» (la primera externa). La tria es desa a `dades/pantalla.json`
+  i es recupera encara que el projector es torni a connectar (es busca pel nom).
+- **Identificar pantalles** (Ctrl+Shift+I): un número gran a cada pantalla durant 4 s; la del
+  projector surt en verd.
+- Moure a la pantalla següent (Ctrl+Shift+M), pantalla completa (Ctrl+Shift+F) i recarregar el
+  projector (Ctrl+Shift+R). Les eines de desenvolupament són a F12.
+
+### Tot a punt? (comprovació prèvia)
+
+Botó **✔ Tot a punt?** a dalt del panell, per a les 16:15. Revisa: guió, tots els fitxers que fa
+servir (i si els vídeos tenen *faststart*), mode gala/assaig i si la gala ja té estat, projector
+connectat i la seva resolució, si és a una pantalla externa, xarxa, mòbils connectats amb nom,
+comandament del presentador, espai al disc i si el portàtil va amb bateria. Té botons de
+**prova de so** (tres tons al projector) i **patró de prova** (quadrícula, cercle i barres de
+color per ajustar el projector).
+
+### Mode assaig
+
+**🎭 Començar assaig** (targeta SESSIÓ) passa a un diari a part (`dades/assaig.jsonl`): es pot
+fer tot l'espectacle, votar, etc. **Tornar a la gala** recupera l'estat de la gala tal com era.
+«Nou assaig» comença un assaig de zero (l'anterior s'arxiva). Els mòbils conserven el nom en
+canviar de mode. Mentre dura, el panell té una franja «MODE ASSAIG», el projector una etiqueta
+petita «ASSAIG» i el comandament del presentador també ho indica. Si l'app es tanca durant
+l'assaig, en tornar a obrir-la continua en mode assaig.
 
 ## Comandament del presentador
 

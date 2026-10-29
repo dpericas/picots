@@ -267,3 +267,28 @@ html, body {
 .wall-card .msg { font-size: 3.6vh; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; flex: 1; }
 .wall-card img { flex: 1; min-height: 0; width: 100%; object-fit: contain; }
 #wall-empty { font-size: 3.4vh; color: #aab; }
+
+/* --- Mode assaig i proves --- */
+#rehearsal-tag {
+  position: fixed; top: 1.2vh; left: 1.2vh; z-index: 30; padding: 0.4vh 1vh; border-radius: 0.6vh;
+  background: rgba(224, 165, 38, 0.85); color: #000; font-weight: 800; font-size: 1.8vh; letter-spacing: 0.1em;
+}
+#test-pattern { position: fixed; inset: 0; z-index: 40; background: #111; }
+.tp-grid {
+  position: absolute; inset: 0; border: 4px solid #fff;
+  background-image: linear-gradient(#555 1px, transparent 1px), linear-gradient(90deg, #555 1px, transparent 1px);
+  background-size: 10vw 10vh;
+}
+.tp-circle {
+  position: absolute; left: 50%; top: 50%; width: 80vh; height: 80vh; transform: translate(-50%, -50%);
+  border: 0.5vh solid #fff; border-radius: 50%;
+}
+.tp-info { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; }
+.tp-title { font-size: 5vh; font-weight: 800; }
+#tp-res { font-size: 4vh; color: var(--accent); }
+.tp-bars { position: absolute; left: 10vw; right: 10vw; bottom: 8vh; height: 8vh; display: flex; }
+.tp-bars span { flex: 1; }
+.tp-bars span:nth-child(1) { background: #fff; } .tp-bars span:nth-child(2) { background: #ff0; }
+.tp-bars span:nth-child(3) { background: #0ff; } .tp-bars span:nth-child(4) { background: #0f0; }
+.tp-bars span:nth-child(5) { background: #f0f; } .tp-bars span:nth-child(6) { background: #f00; }
+.tp-bars span:nth-child(7) { background: #00f; }

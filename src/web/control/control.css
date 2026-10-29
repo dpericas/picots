@@ -121,3 +121,18 @@ dialog img { width: 320px; height: 320px; background: #fff; }
 .wall-item.approved .body { color: var(--go); }
 .wall-item.rejected .body { color: var(--muted); text-decoration: line-through; }
 summary { cursor: pointer; color: var(--muted); margin-top: 6px; }
+
+#rehearsal-banner {
+  background: repeating-linear-gradient(45deg, #e0a526, #e0a526 14px, #c48a12 14px, #c48a12 28px);
+  color: #000; font-weight: 800; text-align: center; padding: 6px; letter-spacing: 0.04em;
+}
+#btn-preflight { padding: 4px 10px; }
+#preflight-dialog { width: min(760px, 92vw); text-align: left; }
+#preflight-dialog h2 { margin: 0 0 8px; color: var(--fg); font-size: 18px; text-transform: none; }
+#preflight-list { list-style: none; padding: 0; margin: 0 0 12px; max-height: 60vh; overflow-y: auto; }
+#preflight-list li { padding: 8px 6px; border-bottom: 1px solid var(--line); }
+#preflight-list .t { font-weight: 700; }
+#preflight-list .d { color: var(--muted); white-space: pre-wrap; font-size: 12px; margin-top: 2px; }
+#preflight-list li.error .t { color: #ffb3b5; }
+#preflight-list li.warn .t { color: var(--warn); }
+#preflight-list li.ok .t { color: #7fd8a6; }

@@ -99,6 +99,15 @@ function normalizeCue(raw, index, problems) {
     cue.order = Array.isArray(raw.ordre) ? raw.ordre.map(String) : null;
     cue.mentions = raw.mencions && typeof raw.mencions === 'object' ? raw.mencions : {};
     cue.people = [];
+    // Diploma imprès (pàgina /diplomes): textos opcionals.
+    const d = raw.diploma && typeof raw.diploma === 'object' ? raw.diploma : {};
+    cue.diploma = {
+      title: d.titol != null ? String(d.titol) : 'Diploma',
+      intro: d.text != null ? String(d.text) : 's\'atorga a',
+      footer: d.peu != null ? String(d.peu) : null,
+      date: d.data != null ? String(d.data) : '',
+      signatures: Array.isArray(d.signatures) ? d.signatures.map(String) : [],
+    };
   } else if (cue.type === 'quiz') {
     normalizeQuiz(cue, raw, problems);
   } else if (cue.type === 'challenge') {

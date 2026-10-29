@@ -29,8 +29,57 @@
 
   const socket = new Gala.GalaSocket('screen', {
     onState: (s) => { state = s; render(); },
-    onConnection: (ok) => $('offline').classList.toggle('hidden', ok),
+    onConnection: (ok) => {
+      $('offline').classList.toggle('hidden', ok);
+      if (ok) sendInfo();
+    },
+    onMessage: (msg) => { if (msg.type === 'test') runTest(msg.what); },
   });
+
+  // Mida real de la pantalla, per a la comprovació prèvia del panell.
+  function sendInfo() {
+    socket.notify({
+      name: 'screen.info', width: window.innerWidth, height: window.innerHeight, dpr: window.devicePixelRatio || 1,
+      fullscreen: window.innerWidth === screen.width && window.innerHeight === screen.height,
+    });
+  }
+  let infoTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(infoTimer);
+    infoTimer = setTimeout(sendInfo, 300);
+  });
+
+  // Proves des del panell: so (tres tons) i patró per ajustar el projector.
+  let patternTimer = null;
+  function runTest(what) {
+    if (what === 'sound') {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      [523.25, 659.25, 783.99].forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = f;
+        const t = ctx.currentTime + i * 0.35;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.4, t + 0.03);
+        gain.gain.linearRampToValueAtTime(0, t + 0.32);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.34);
+      });
+      setTimeout(() => ctx.close(), 1500);
+    } else if (what === 'pattern') {
+      $('tp-res').textContent = Math.round(window.innerWidth * (window.devicePixelRatio || 1)) + ' x ' +
+        Math.round(window.innerHeight * (window.devicePixelRatio || 1));
+      show('test-pattern', true);
+      clearTimeout(patternTimer);
+      patternTimer = setTimeout(() => show('test-pattern', false), 15000);
+    } else {
+      clearTimeout(patternTimer);
+      show('test-pattern', false);
+    }
+  }
 
   const deck = new VideoDeck($('videos'), {
     onEnded: () => {
@@ -414,6 +463,7 @@
       if (s.paused || (type === 'parade' && parade.busyWithVideo())) music.pause();
       else if (music.paused) safePlay(music);
     }
+    show('rehearsal-tag', s.mode === 'assaig');
     show('overlay-hold', s.overlay === 'hold');
     show('overlay-black', s.overlay === 'black');
   }
