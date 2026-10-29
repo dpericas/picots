@@ -147,7 +147,7 @@ cues:
   - id: repte
     tipus: repte
     titol: "Repte – Obrim el cofre!"
-    text: "Toqueu el mòbil tan ràpid com pugueu per obrir el cofre!"
+    text: "Toqueu el botó tan ràpid com pugueu per obrir el cofre!"
     modalitat: tocs
     objectiu: 300
     temps: 20
