@@ -21,15 +21,16 @@ function linearNext(show, cue) {
 /**
  * Camí de l'espectacle sense interacció.
  * @param {object} choices  { votes: {cueId: índex}, challenge: 'success' | 'fail' }
+ * @param {string} [startId] cue des d'on començar (per defecte, la primera)
  * @returns {{ ids: string[], warnings: string[] }}
  */
-function linearPath(show, choices) {
+function linearPath(show, choices, startId) {
   const votes = (choices && choices.votes) || {};
   const challenge = (choices && choices.challenge) || 'success';
   const ids = [];
   const warnings = [];
   const byId = new Map(show.cues.map((c) => [c.id, c]));
-  let cue = show.cues[0] || null;
+  let cue = startId ? byId.get(startId) || null : show.cues[0] || null;
   while (cue) {
     if (ids.includes(cue.id)) {
       warnings.push('El camí torna a «' + cue.id + '» (bucle): s\'atura aquí.');

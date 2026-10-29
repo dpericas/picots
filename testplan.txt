@@ -1,7 +1,7 @@
-PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador; cicle 6: qüestionari, repte, mencions i mur; cicle 7: eines de preparació, assaig i pantalles; cicle 8: targetes QR, vídeo de reserva i privacitat)
+PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador; cicle 6: qüestionari, repte, mencions i mur; cicle 7: eines de preparació, assaig i pantalles; cicle 8: targetes QR, vídeo de reserva i privacitat; cicle 9: durada, editor del guió, guió del presentador i rètols)
 ================================================
 
-Proves automàtiques: `npm test` (57 tests: motor, guió, servidor, cues interactives, generador
+Proves automàtiques: `npm test` (65 tests: motor, guió, servidor, cues interactives, generador
 de vídeos, vídeo de reserva, assaig, comprovació prèvia, diplomes, targetes, resum i esborrat). Aquest pla cobreix
 el que els tests no poden verificar (pantalles reals, xarxa, Windows) i, per a cada
 àrea automatitzada, només la prova manual mínima que la confirma en condicions reals.
@@ -327,3 +327,35 @@ Expected Result: (1) El resum es veu sense connexió, amb resultats, camí, miss
          (2) Sense la casella no s'esborra res; amb la casella l'app es tanca i dades\ ja no
          existeix; en tornar a obrir comença de zero i els QR personals antics ja no serveixen.
          (3) També desapareixen show\, fonts-entrada\ i reserva\; la resta de fitxers no es toquen.
+
+------------------------------------------------------------------------------
+T31 – Durada estimada i temps real
+Purpose: Verificar que l'estimació és útil per planificar i que l'assaig dona els temps reals.
+Method:  1. Amb el contingut real, obrir el panell: anotar la durada total i el minut d'inici de
+            cada bloc. 2. Fer un assaig complet (mode assaig) amb el presentador.
+         3. Posar durada_estimada a les cues en directe segons el que ha durat a l'assaig.
+Expected Result: (1) Els vídeos mostren la seva durada exacta; la resta amb «≈». (2) Cada cue
+         mostra el temps real; «En marxa» i «Queda» avancen; les cues que s'allarguen molt surten
+         en taronja. (3) La durada total del panell s'acosta a la de l'assaig (±10 %).
+
+------------------------------------------------------------------------------
+T32 – Editor del guió
+Purpose: Verificar que es pot preparar el guió sense tocar el YAML i sense perdre res.
+Method:  1. Panell › ✏️ Editor del guió. Afegir un participant, canviar-ne la menció, afegir una
+            cue de qüestionari amb 3 preguntes, canviar l'id d'una cue a què apunta una votació.
+         2. Deixar un vídeo sense fitxer i intentar desar. 3. Corregir-ho i desar (Ctrl+S).
+         4. Obrir el show.yaml amb un editor de text. 5. Editar el show.yaml a mà i, sense
+            recarregar l'editor, desar-hi un altre canvi.
+Expected Result: (2) Error a la llista i el botó de desar desactivat. (3) «Desat i aplicat»;
+         l'escaleta del panell es veu actualitzada al moment; còpia a dades/guio-copies.
+         (4) Comentaris de capçalera intactes; la votació apunta a l'id nou. (5) Avís de conflicte
+         amb l'opció de sobreescriure o carregar la versió del fitxer.
+
+------------------------------------------------------------------------------
+T33 – Guió del presentador i rètols dels vídeos dels professors
+Purpose: Verificar el guió imprès i els rètols a la pantalla.
+Method:  1. Menú Gala › Exportar guió del presentador a PDF; imprimir-lo.
+         2. Posar rotol a un vídeo de professor i passar-lo al projector.
+Expected Result: (1) Totes les cues en ordre amb minut previst, text a dir, branques i
+         respostes; les branques no previstes en gris. (2) El rètol entra a baix a l'esquerra en
+         començar el vídeo i desapareix als 7 s; no surt a les altres cues.

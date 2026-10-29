@@ -30,6 +30,7 @@ function initialState() {
     quiz: {}, // cueId -> { [pregunta]: { participantId: { option, ms } } }
     challenges: {}, // cueId -> { status, endsAt, taps, result, reason }
     wall: [], // missatges: { id, cueId, participantId, text, drawing, at, status }
+    timeline: [], // entrades a cues: { cueId, t } (cueId null = fi), per mesurar el temps real
   };
 }
 
@@ -43,6 +44,8 @@ function applyEvent(state, ev) {
       else if (ev.via !== 'reenter' && s.cueId) s.history.push(s.cueId);
       s.cueId = ev.cueId;
       s.enterSeq = ev.seq;
+      if (!s.timeline) s.timeline = [];
+      s.timeline.push({ cueId: ev.cueId, t: ev.t });
       s.step = 0;
       s.stepAt = ev.t;
       s.stepEndsAt = null;
@@ -60,6 +63,8 @@ function applyEvent(state, ev) {
       break;
     case 'show.end':
       s.ended = true;
+      if (!s.timeline) s.timeline = [];
+      s.timeline.push({ cueId: null, t: ev.t });
       break;
     case 'playback.pause':
       s.paused = ev.paused;

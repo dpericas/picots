@@ -168,3 +168,45 @@ test('wipe: només esborra carpetes que són de l\'app', () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+const { mergeShow } = require('../src/tools/yaml-merge');
+const YAML = require('yaml');
+
+test('mergeShow: conserva comentaris i format del que no canvia', () => {
+  const text = [
+    '# Capçalera del guió',
+    'titol: Gala',
+    'participants:',
+    '  - { id: a, nom: A }',
+    '  - { id: b, nom: B }',
+    'cues:',
+    '  # comentari de la primera cue',
+    '  - id: x',
+    '    tipus: espera',
+    '    text: Hola',
+    '',
+    '  - id: y',
+    '    tipus: espera',
+    '',
+  ].join('\n');
+  assert.strictEqual(mergeShow(text, YAML.parse(text)), text, 'sense canvis, el fitxer és idèntic');
+  const raw = YAML.parse(text);
+  raw.cues[1].text = 'Nou';
+  raw.participants.push({ id: 'c', nom: 'C' });
+  raw.cues.push({ id: 'z', tipus: 'video', fitxer: 'z.mp4' });
+  const out = mergeShow(text, raw);
+  assert.ok(out.startsWith('# Capçalera del guió'));
+  assert.ok(out.includes('  # comentari de la primera cue\n  - id: x'));
+  assert.ok(out.includes('- { id: c, nom: C }'), 'els participants nous en una línia');
+  assert.deepStrictEqual(YAML.parse(out), raw);
+  delete raw.titol;
+  assert.ok(!('titol' in YAML.parse(mergeShow(text, raw))));
+});
+
+test('La proposta de guió de docs/contingut és vàlida', () => {
+  const text = fs.readFileSync(path.join(__dirname, '..', 'docs', 'contingut', 'show-proposta.yaml'), 'utf8');
+  const r = parseShow(text);
+  assert.deepStrictEqual(r.problems.filter((p) => p.level === 'error'), []);
+  assert.strictEqual(r.show.participants.length, 23);
+  assert.ok(r.show.cues.some((c) => c.type === 'video' && c.caption), 'els vídeos dels professors porten rètol');
+});

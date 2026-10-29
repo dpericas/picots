@@ -293,6 +293,20 @@ function createControlWindow() {
     webPreferences: { contextIsolation: true, sandbox: true },
   });
   watchRenderer(controlWin, 'panell de control');
+  // Editor, diplomes i targetes s'obren en finestres pròpies, grans.
+  controlWin.webContents.setWindowOpenHandler(({ url }) => {
+    if (!url.startsWith(server.localUrl)) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        width: Math.min(1400, primary.workAreaSize.width), height: Math.min(900, primary.workAreaSize.height),
+        autoHideMenuBar: true, backgroundColor: '#14161c', webPreferences: { contextIsolation: true, sandbox: true },
+      },
+    };
+  });
   controlWin.loadURL(server.localUrl + '/control');
   controlWin.on('close', (e) => {
     if (quitting) return;
@@ -320,6 +334,7 @@ function buildMenu() {
         { label: 'Obrir carpeta de dades i registres', click: () => shell.openPath(server.dataDir) },
         { label: 'Exportar targetes QR a PDF…', click: () => exportPdf('/targetes', 'targetes-qr.pdf', false) },
         { label: 'Exportar diplomes a PDF…', click: () => exportPdf('/diplomes', 'diplomes.pdf', true) },
+        { label: 'Exportar guió del presentador a PDF…', click: () => exportPdf('/guio', 'guio-presentador.pdf', false) },
         { type: 'separator' },
         { label: 'Desar resum de la gala…', click: () => saveSummary() },
         { label: 'Esborrar dades després de la gala…', click: wipeAfterGala },

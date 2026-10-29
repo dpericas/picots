@@ -75,6 +75,15 @@
     return state && state.cues.find((c) => c.id === id);
   }
 
+  // 1:05:30 o 4:05
+  function clock(seconds) {
+    const t = Math.max(0, Math.round(seconds));
+    const h = Math.floor(t / 3600);
+    const m = Math.floor(t / 60) % 60;
+    const s = String(t % 60).padStart(2, '0');
+    return h ? h + ':' + String(m).padStart(2, '0') + ':' + s : m + ':' + s;
+  }
+
   function cueLabel(c) {
     return c ? (c.title || c.id) : '—';
   }
@@ -156,6 +165,8 @@
   const openPrint = (page) => window.open(page + (pin ? '?pin=' + encodeURIComponent(pin) : ''), '_blank');
   $('btn-diplomas').addEventListener('click', () => openPrint('/diplomes'));
   $('btn-cards').addEventListener('click', () => openPrint('/targetes'));
+  $('btn-editor').addEventListener('click', () => openPrint('/editor'));
+  $('btn-script').addEventListener('click', () => openPrint('/guio'));
   $('btn-preflight-again').addEventListener('click', preflight);
   $('btn-preflight-close').addEventListener('click', () => $('preflight-dialog').close());
   $('btn-test-sound').addEventListener('click', () => send({ name: 'screen.test', what: 'sound' }));
@@ -187,8 +198,18 @@
   }
 
   // --- Pintat ---
+  let routeStart = {};
   function renderRundown() {
     const s = state.state;
+    // Minut en què comença cada cue del camí per defecte.
+    routeStart = {};
+    if (state.timing) {
+      let acc = 0;
+      state.timing.route.forEach((id) => {
+        routeStart[id] = acc;
+        acc += state.timing.perCue[id].seconds;
+      });
+    }
     const goTarget = state.go.action === 'enter' ? state.go.cueId : null;
     const visited = new Set(s.history.concat(s.cueId ? [s.cueId] : []));
     const list = $('rundown');
@@ -203,9 +224,23 @@
       if (c.options) branchText = c.options.map((o, j) => String.fromCharCode(65 + j) + '→' + o.goto).join('  ');
       if (c.outcomes) branchText = '✔→' + c.outcomes.success + '  ✘→' + (c.outcomes.fail || 'fi');
       const branches = branchText ? el('span', { class: 'branches', text: branchText }) : null;
+      const tm = state.timing;
+      let dur = null;
+      if (tm && tm.perCue[c.id]) {
+        const e = tm.perCue[c.id];
+        const real = tm.actual[c.id];
+        const startAt = routeStart[c.id];
+        dur = el('span', { class: 'dur', title: (startAt != null ? 'Comença cap al minut ' + clock(startAt) + ' (camí per defecte). ' : '') +
+          (e.unknown ? 'No es pot llegir la durada del vídeo.' : e.manual ? 'durada_estimada del guió.' : e.approx ? 'Estimació: depèn del ritme de la sala.' : 'Durada del vídeo o de les fotos.') }, [
+          e.unknown ? '?' : (e.approx ? '≈' : '') + clock(e.seconds),
+          real != null ? el('span', { class: real > e.seconds * 1.25 + 15 ? 'over' : 'real', text: ' · ' + clock(real) }) : null,
+          startAt != null ? el('div', { text: '+' + clock(startAt) }) : null,
+        ]);
+      }
       const li = el('li', { class: classes.join(' '), title: c.notes || '' }, [
         el('span', { class: 'type', text: (i + 1) + ' ' + (TYPE_LABEL[c.type] || c.type) }),
         el('span', {}, [cueLabel(c), branches]),
+        dur,
       ]);
       li.addEventListener('click', () => { selected = c.id; renderRundown(); });
       li.addEventListener('dblclick', () => send({ name: 'jump', cueId: c.id }));
@@ -469,9 +504,27 @@
     $('ch-timer').textContent = c && c.status === 'open' && c.endsAt ? left(c.endsAt) : '';
   }
 
+  // Durada: estimada, en marxa i el que queda (el que queda es recalcula al servidor a cada canvi).
+  let timingAt = Date.now();
+  function renderTiming() {
+    const tm = state && state.timing;
+    if (!tm) return;
+    const since = (Date.now() - timingAt) / 1000;
+    const s = state.state;
+    const running = s.started && !s.ended;
+    const parts = [el('span', { text: 'Estimat ' }), el('b', { text: '≈' + clock(tm.total) })];
+    if (s.started) {
+      parts.push(el('span', { text: ' · En marxa ' }), el('b', { text: clock(tm.elapsed + (running ? since : 0)) }));
+      if (running) parts.push(el('span', { text: ' · Queda ' }), el('b', { text: '≈' + clock(tm.remaining - since) }));
+    }
+    $('timing').textContent = '';
+    parts.forEach((p) => $('timing').append(p));
+  }
+
   setInterval(() => {
     $('clock').textContent = new Date().toLocaleTimeString('ca-ES');
     updateTimer();
+    renderTiming();
   }, 250);
 
   function renderMode() {
@@ -485,6 +538,8 @@
 
   function render() {
     $('title').textContent = state.title + ' – Control';
+    timingAt = Date.now();
+    renderTiming();
     renderMode();
     renderRundown();
     renderNow();

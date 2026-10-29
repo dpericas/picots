@@ -292,3 +292,14 @@ html, body {
 .tp-bars span:nth-child(3) { background: #0ff; } .tp-bars span:nth-child(4) { background: #0f0; }
 .tp-bars span:nth-child(5) { background: #f0f; } .tp-bars span:nth-child(6) { background: #f00; }
 .tp-bars span:nth-child(7) { background: #00f; }
+
+/* Rètol dels vídeos (qui parla): entra per l'esquerra i se'n va sol */
+#caption {
+  position: fixed; left: 5vw; bottom: 8vh; z-index: 5; padding: 1.4vh 2.4vw; border-radius: 1vh;
+  background: rgba(10, 8, 25, 0.78); border-left: 0.8vh solid var(--accent);
+  font-size: 4.2vh; font-weight: 700; color: #fff; text-shadow: 0 0.3vh 1vh #000; max-width: 80vw;
+  animation: caption-in 0.6s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+#caption.out { animation: caption-out 0.5s ease-in forwards; }
+@keyframes caption-in { from { opacity: 0; transform: translateX(-6vw); } to { opacity: 1; transform: none; } }
+@keyframes caption-out { to { opacity: 0; transform: translateX(-4vw); } }

@@ -216,6 +216,38 @@ Si tots dos premen GO alhora, només s'avança una vegada.
   recupera la seva identitat des de qualsevol mòbil. «Alliberar» deslliga un mòbil.
 - **Nova sessió**: arxiva el diari (`journal-<data>.jsonl`) i comença de zero (per als assajos).
 
+## Contingut
+
+A `docs/contingut/` hi ha el material per preparar el contingut: una proposta de conte
+(«La missió secreta dels Picots», amb els professors com a guardians de les pàgines de cada curs),
+el guió complet per a l'app (`show-proposta.yaml`), un banc de preguntes, idees de mencions i les
+instruccions per a famílies i professors.
+
+## Editor del guió
+
+Panell › SESSIÓ › **✏️ Editor del guió**: edita el `show.yaml` amb formularis (general i xarxa,
+participants en una taula, i cada cue amb els seus camps; afegir, duplicar, ordenar i eliminar).
+Els fitxers es trien d'una llista dels que hi ha a `show/`. Revisa el guió mentre s'escriu (els
+errors surten a baix i marcats a la llista) i no deixa desar si n'hi ha. **Desar i aplicar**
+(Ctrl+S) fa una còpia a `dades/guio-copies/` (les 20 últimes), escriu el fitxer conservant-ne els
+comentaris i l'aplica al moment. Canviar l'id d'una cue o d'un nen actualitza les referències.
+Si algú ha editat el fitxer mentrestant, avisa abans de sobreescriure'l.
+
+## Durada
+
+L'escaleta mostra la **durada** de cada cue (els vídeos es mesuren; «≈» vol dir estimada perquè
+depèn del ritme de la sala) i el **minut previst** d'inici pel camí per defecte. A dalt: durada
+total estimada, temps **en marxa** i el que **queda**. Durant un assaig, al costat de cada cue
+surt també el temps **real** (en taronja si s'ha allargat molt). Les estimacions es poden fixar
+per cue amb `durada_estimada` («2:30»). No hi ha cap límit de durada.
+
+**📄 Guió del presentador** (panell, o menú Gala › Exportar a PDF): totes les cues en ordre amb
+el minut previst, el text a dir, les opcions de les votacions, les respostes del qüestionari, els
+nens de l'entrada i les mencions.
+
+Les cues de vídeo poden tenir un **rètol** (`rotol: "Mireia · tutora de P3"`) que surt a baix
+a l'esquerra els primers 7 segons: per als vídeos dels professors.
+
 ## Targetes QR
 
 Botó **🪪 Targetes QR** del panell, o menú **Gala › Exportar targetes QR a PDF…**: 8 targetes

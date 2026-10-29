@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gala Manager – Editor del guió</title>
+  <link rel="stylesheet" href="/static/editor/editor.css">
+</head>
+<body>
+  <header>
+    <h1>Editor del guió</h1>
+    <span id="status" class="pill">Carregant…</span>
+    <span class="spacer"></span>
+    <button id="btn-discard" title="Torna a carregar el show.yaml i descarta els canvis">Descartar canvis</button>
+    <button id="btn-save" class="primary" title="Ctrl+S">Desar i aplicar</button>
+  </header>
+  <div id="live-banner" class="hidden">La gala està en marxa: en desar, els canvis s'apliquen al moment.</div>
+  <div id="conflict" class="hidden">
+    El show.yaml ha canviat des que l'has obert. <button id="btn-overwrite">Sobreescriure'l igualment</button>
+    <button id="btn-reload-file">Carregar la versió del fitxer</button>
+  </div>
+  <main>
+    <nav>
+      <button class="nav-item" data-sel="general">⚙ General</button>
+      <button class="nav-item" data-sel="participants">👧 Participants <span id="n-participants"></span></button>
+      <div class="nav-head">Cues</div>
+      <ol id="cue-list"></ol>
+      <div class="add-cue">
+        <select id="new-type"></select>
+        <button id="btn-add-cue">+ Afegir cue</button>
+      </div>
+    </nav>
+    <section id="form"></section>
+  </main>
+  <footer>
+    <div class="label">REVISIÓ DEL GUIÓ <span id="problem-count"></span></div>
+    <ul id="problems"></ul>
+  </footer>
+  <div id="toasts"></div>
+  <datalist id="dl-video"></datalist>
+  <datalist id="dl-image"></datalist>
+  <datalist id="dl-audio"></datalist>
+  <datalist id="dl-folder"></datalist>
+  <script src="/static/common/client.js"></script>
+  <script src="/static/editor/schema.js"></script>
+  <script src="/static/editor/editor.js"></script>
+</body>
+</html>

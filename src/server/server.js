@@ -12,17 +12,24 @@ const { WebSocketServer } = require('ws');
 const { makeLogger, timestamp } = require('../common/log');
 const { Engine } = require('../engine/engine');
 const { FileJournal } = require('../engine/journal');
-const { loadShow, hasErrors } = require('../engine/show');
+const { loadShow, parseShow, hasErrors } = require('../engine/show');
 const { screenView, playView, controlView, remoteView } = require('../engine/views');
 const { safeResolve, serveFile, sendError } = require('./static');
 const { pickLanAddress, isLoopback } = require('./net');
 const { runPreflight } = require('./preflight');
+const { mp4Duration, estimateCue, actualTimes } = require('../engine/timing');
+const { linearPath } = require('../tools/backup-video');
+const { mergeShow } = require('../tools/yaml-merge');
+const YAML = require('yaml');
 const { renderDiplomas } = require('./diplomas');
 const { renderCards } = require('./cards');
 const { renderSummary } = require('./summary');
+const { renderScript } = require('./script');
 
 const WEB_DIR = path.join(__dirname, '..', 'web');
-const PAGES = { '/screen': 'screen', '/control': 'control', '/play': 'play', '/remote': 'remote' };
+const PAGES = { '/screen': 'screen', '/control': 'control', '/play': 'play', '/remote': 'remote', '/editor': 'editor' };
+const MEDIA_LIST_MAX = 5000;
+const SHOW_BACKUPS = 20;
 const ROLE_COMMANDS = {
   play: ['claim', 'ballot', 'release', 'answer', 'tap', 'wall.post'],
   remote: ['go', 'back', 'remote.alert'],
@@ -120,12 +127,61 @@ async function startServer(opts) {
     };
   }
 
+  // --- Durada: estimació (es recalcula si canvia el guió) i temps real del diari ---
+  const videoCache = new Map();
+  function videoSeconds(rel) {
+    const file = path.join(showDir, rel);
+    try {
+      const st = fs.statSync(file);
+      const c = videoCache.get(file);
+      if (c && c.mtime === st.mtimeMs) return c.seconds;
+      const seconds = mp4Duration(file);
+      videoCache.set(file, { mtime: st.mtimeMs, seconds });
+      return seconds;
+    } catch (err) {
+      return null;
+    }
+  }
+  let estimates = null;
+  function timingInfo() {
+    if (!estimates || estimates.show !== show) {
+      const perCue = {};
+      show.cues.forEach((c) => { perCue[c.id] = estimateCue(c, show, videoSeconds); });
+      const route = linearPath(show).ids;
+      estimates = { show, perCue, route, total: route.reduce((a, id) => a + perCue[id].seconds, 0) };
+    }
+    const s = engine.state;
+    const now = engine.now();
+    const timeline = s.timeline || [];
+    const last = timeline[timeline.length - 1];
+    const startedAt = timeline.length ? timeline[0].t : null;
+    let remaining = estimates.total;
+    if (s.started && !s.ended && s.cueId) {
+      // El que queda: el que falta de la cue actual i el camí per defecte des d'aquí.
+      const inCue = last ? (now - last.t) / 1000 : 0;
+      const rest = linearPath(show, null, s.cueId).ids.slice(1);
+      remaining = Math.max(0, estimates.perCue[s.cueId].seconds - inCue) +
+        rest.reduce((a, id) => a + estimates.perCue[id].seconds, 0);
+    } else if (s.ended) {
+      remaining = 0;
+    }
+    return {
+      perCue: estimates.perCue,
+      route: estimates.route,
+      total: estimates.total,
+      actual: actualTimes(timeline, now),
+      elapsed: startedAt != null ? ((s.ended && last ? last.t : now) - startedAt) / 1000 : 0,
+      remaining,
+    };
+  }
+
   function viewFor(client) {
     if (client.role === 'screen') return screenView(engine, { joinUrl: joinUrl(), mode });
     if (client.role === 'remote') return remoteView(engine, { enabled: remote.enabled, mode });
     if (client.role === 'play') return playView(engine, client.deviceId);
     return controlView(engine, {
       joinUrl: joinUrl(), personalUrl, problems, clients: clientList(), mediaErrors, remote: remoteInfo(), mode,
+      timing: timingInfo(),
     });
   }
 
@@ -212,6 +268,89 @@ async function startServer(opts) {
       log.warn('No es pot desar la posició: ' + err.message);
     }
   }, POSITION_SAVE_MS);
+
+  // --- Editor del guió ---
+  const showFile = path.join(showDir, 'show.yaml');
+
+  // Fitxers de la carpeta de l'espectacle, per triar-los a l'editor.
+  function mediaList() {
+    const files = [];
+    const dirs = [];
+    const walk = (rel) => {
+      let entries;
+      try {
+        entries = fs.readdirSync(path.join(showDir, rel), { withFileTypes: true });
+      } catch (err) {
+        return;
+      }
+      for (const e of entries) {
+        if (e.name.startsWith('.') || files.length >= MEDIA_LIST_MAX) continue;
+        const r = rel ? rel + '/' + e.name : e.name;
+        if (e.isDirectory()) {
+          dirs.push(r);
+          walk(r);
+        } else if (!/^show\.yaml/.test(r)) {
+          files.push(r);
+        }
+      }
+    };
+    walk('');
+    return { files: files.sort(), dirs: dirs.sort() };
+  }
+
+  function showText() {
+    return fs.readFileSync(showFile, 'utf8');
+  }
+
+  function validateRaw(raw) {
+    const text = mergeShow(showText(), raw);
+    const r = parseShowText(text);
+    return { text, problems: r.problems, ok: !!r.show && !hasErrors(r.problems) };
+  }
+
+  function parseShowText(text) {
+    return parseShow(text, showDir);
+  }
+
+  function backupShow() {
+    const dir = path.join(dataDir, 'guio-copies');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.copyFileSync(showFile, path.join(dir, 'show-' + fileStamp() + '.yaml'));
+    const old = fs.readdirSync(dir).filter((f) => /^show-.+\.yaml$/.test(f)).sort();
+    old.slice(0, Math.max(0, old.length - SHOW_BACKUPS)).forEach((f) => fs.rmSync(path.join(dir, f), { force: true }));
+  }
+
+  function handleEditorCommand(cmd) {
+    if (cmd.name === 'show.get') {
+      const text = showText();
+      let raw = null;
+      try {
+        raw = YAML.parse(text) || {};
+      } catch (err) {
+        return { ok: false, error: 'El show.yaml té un error de sintaxi: ' + err.message };
+      }
+      return { ok: true, raw, mtime: fs.statSync(showFile).mtimeMs, media: mediaList(), problems };
+    }
+    if (cmd.name === 'show.validate') {
+      const v = validateRaw(cmd.raw || {});
+      return { ok: true, valid: v.ok, problems: v.problems };
+    }
+    if (cmd.name === 'show.save') {
+      if (cmd.mtime != null && fs.statSync(showFile).mtimeMs !== cmd.mtime && !cmd.force) {
+        return { ok: false, conflict: true, error: 'El show.yaml ha canviat des que l\'has obert (algú l\'ha editat).' };
+      }
+      const v = validateRaw(cmd.raw || {});
+      if (!v.ok) return { ok: false, error: 'El guió té errors: corregeix-los abans de desar.', problems: v.problems };
+      backupShow();
+      const tmp = showFile + '.tmp';
+      fs.writeFileSync(tmp, v.text);
+      fs.renameSync(tmp, showFile);
+      const r = handleServerCommand({ name: 'show.reload' });
+      log.info('Guió desat des de l\'editor' + (r.ok ? ' i aplicat.' : ': ' + r.error));
+      return Object.assign({}, r, { mtime: fs.statSync(showFile).mtimeMs, problems: r.ok ? problems : r.problems });
+    }
+    return null;
+  }
 
   function handleServerCommand(cmd) {
     if (cmd.name === 'show.reload') {
@@ -307,7 +446,7 @@ async function startServer(opts) {
       return { ok: true };
     }
     if (client.role === 'control') {
-      const r = handleServerCommand(cmd);
+      const r = handleServerCommand(cmd) || handleEditorCommand(cmd);
       if (r) return r;
     }
     return engine.dispatch(cmd);
@@ -333,6 +472,11 @@ async function startServer(opts) {
     // Pàgines d'impressió: com el panell, des d'aquest ordinador o amb el PIN de control.
     const controlAllowed = () => isLoopback(req.socket.remoteAddress) ||
       !!(controlPin && url.searchParams.get('pin') === controlPin);
+    if (p === '/guio') {
+      if (!controlAllowed()) return sendError(res, 403);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(renderScript(show, timingInfo()));
+    }
     if (p === '/resum') {
       if (!controlAllowed()) return sendError(res, 403);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });

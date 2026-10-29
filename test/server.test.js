@@ -408,6 +408,62 @@ test('Servidor: resum de la gala i targetes QR', async () => {
     assert.strictEqual((cards.body.match(/class="card generic"/g) || []).length, 2);
     assert.strictEqual((cards.body.match(/<svg/g) || []).length, 4);
     assert.ok(cards.body.includes('ip_publica'), 'avisa que la IP no està fixada');
+    const script = await get(srv.port, '/guio');
+    assert.strictEqual(script.status, 200);
+    assert.ok(script.body.includes('Guió del presentador'));
+    assert.ok(script.body.includes('X → intro'), 'branques de les votacions');
+  } finally {
+    await srv.close();
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});
+
+test('Servidor: el panell rep la durada estimada i el temps real', async () => {
+  const t = tmpShow();
+  const srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet });
+  try {
+    const control = await connect(srv.port, 'role=control');
+    let s = await control.until((st) => st.timing);
+    // El vídeo de prova no és un MP4 de debò: durada desconeguda.
+    assert.strictEqual(s.timing.perCue.intro.unknown, true);
+    assert.deepStrictEqual(s.timing.route, ['intro', 'v1']);
+    assert.strictEqual(s.timing.elapsed, 0);
+    assert.ok((await control.cmd({ name: 'go' })).ok);
+    s = await control.until((st) => st.state.started);
+    assert.ok(s.timing.actual.intro >= 0);
+    assert.ok(s.timing.remaining > 0);
+  } finally {
+    await srv.close();
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});
+
+test('Servidor: editor del guió (llegir, revisar, desar amb còpia i conflicte)', async () => {
+  const t = tmpShow();
+  const srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet });
+  try {
+    const control = await connect(srv.port, 'role=control');
+    const phone = await connect(srv.port, 'role=play&device=d1');
+    assert.strictEqual((await phone.cmd({ name: 'show.get' })).ok, false, 'un mòbil no pot llegir el guió');
+    const got = await control.cmd({ name: 'show.get' });
+    assert.ok(got.ok);
+    assert.ok(got.media.files.includes('media/v.mp4'));
+    assert.deepStrictEqual(got.media.dirs, ['media']);
+    const raw = got.raw;
+    raw.cues[0].titol = 'Intro editada';
+    raw.cues.push({ id: 'x', tipus: 'video' }); // sense fitxer: error
+    const bad = await control.cmd({ name: 'show.validate', raw });
+    assert.strictEqual(bad.valid, false);
+    assert.ok(bad.problems.some((p) => p.cueId === 'x'));
+    assert.strictEqual((await control.cmd({ name: 'show.save', raw, mtime: got.mtime })).ok, false);
+    raw.cues.pop();
+    const saved = await control.cmd({ name: 'show.save', raw, mtime: got.mtime });
+    assert.ok(saved.ok, saved.error);
+    assert.strictEqual(srv.engine.show.cues[0].title, 'Intro editada');
+    assert.strictEqual(fs.readdirSync(path.join(t.dataDir, 'guio-copies')).length, 1);
+    // Desar amb una versió vella: conflicte.
+    const stale = await control.cmd({ name: 'show.save', raw, mtime: got.mtime - 1000 });
+    assert.strictEqual(stale.conflict, true);
   } finally {
     await srv.close();
     fs.rmSync(t.root, { recursive: true, force: true });

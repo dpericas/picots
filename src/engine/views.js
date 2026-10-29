@@ -21,6 +21,7 @@ function cuePublic(cue, show) {
     out.src = mediaUrl(cue.file);
     out.auto = cue.auto;
     out.fade = cue.fade;
+    out.caption = cue.caption;
   } else if (cue.type === 'slides') {
     out.images = cue.images.map(mediaUrl);
     out.interval = cue.interval;
@@ -420,6 +421,7 @@ function controlView(engine, extra) {
     mediaErrors: extra.mediaErrors,
     joinUrl: extra.joinUrl,
     mode: extra.mode || 'gala',
+    timing: extra.timing || null,
   };
 }
 

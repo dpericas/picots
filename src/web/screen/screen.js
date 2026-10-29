@@ -26,6 +26,24 @@
   let wallShown = new Set();
   // Les mencions fan servir la capa de l'entrada triomfal.
   const LAYER_OF = { awards: 'parade' };
+  const CAPTION_MS = 7000;
+  let captionTimers = [];
+
+  // Rètol d'un vídeo: es mostra en començar i desapareix sol.
+  function showCaption(text) {
+    captionTimers.forEach(clearTimeout);
+    captionTimers = [];
+    const c = $('caption');
+    c.classList.remove('out');
+    if (!text) {
+      show('caption', false);
+      return;
+    }
+    c.textContent = text;
+    show('caption', true);
+    captionTimers.push(setTimeout(() => c.classList.add('out'), CAPTION_MS));
+    captionTimers.push(setTimeout(() => show('caption', false), CAPTION_MS + 600));
+  }
 
   const socket = new Gala.GalaSocket('screen', {
     onState: (s) => { state = s; render(); },
@@ -202,8 +220,10 @@
     if (!cue) {
       deck.release(0);
       setMusic(null);
+      showCaption(null);
       return;
     }
+    showCaption(cue.type === 'video' ? cue.caption : null);
     if (cue.type === 'video') {
       const r = state.resume;
       const resume = r && r.cueId === cue.id && r.enterSeq === state.enterSeq;

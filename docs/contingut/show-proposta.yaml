@@ -1,0 +1,385 @@
+# Proposta de guió: «La missió secreta dels Picots» (vegeu docs/contingut/guio-conte.md).
+# Cada curs és una «pàgina»: el vídeo del seu guardià (el professor/a d'aquell curs
+# s'acomiada i explica una anècdota) i les fotos d'aquell curs.
+# Per fer-lo servir: copia'l a show/show.yaml, canvia els noms i els ids dels nens (sense
+# espais, p. ex. "marti"), omple les mencions i ves posant els fitxers a show/media/.
+# Les durades estimades de les parts en directe (benvinguda, homenatge…) són orientatives:
+# ajusta-les després del primer assaig amb els temps reals del panell.
+
+titol: Gala Picots 2027
+
+xarxa:
+  port: 8080
+  # IP reservada al router de la sala per al portàtil (els QR impresos la porten).
+  # ip_publica: 192.168.50.10
+  pin_presentador: "2027"
+
+participants:
+  - { id: nen01, nom: "Nen 1", foto: media/fotos/nen01.jpg, video_entrada: media/entrada/nen01.mp4, mencio: "" }
+  - { id: nen02, nom: "Nen 2", foto: media/fotos/nen02.jpg, video_entrada: media/entrada/nen02.mp4, mencio: "" }
+  - { id: nen03, nom: "Nen 3", foto: media/fotos/nen03.jpg, video_entrada: media/entrada/nen03.mp4, mencio: "" }
+  - { id: nen04, nom: "Nen 4", foto: media/fotos/nen04.jpg, video_entrada: media/entrada/nen04.mp4, mencio: "" }
+  - { id: nen05, nom: "Nen 5", foto: media/fotos/nen05.jpg, video_entrada: media/entrada/nen05.mp4, mencio: "" }
+  - { id: nen06, nom: "Nen 6", foto: media/fotos/nen06.jpg, video_entrada: media/entrada/nen06.mp4, mencio: "" }
+  - { id: nen07, nom: "Nen 7", foto: media/fotos/nen07.jpg, video_entrada: media/entrada/nen07.mp4, mencio: "" }
+  - { id: nen08, nom: "Nen 8", foto: media/fotos/nen08.jpg, video_entrada: media/entrada/nen08.mp4, mencio: "" }
+  - { id: nen09, nom: "Nen 9", foto: media/fotos/nen09.jpg, video_entrada: media/entrada/nen09.mp4, mencio: "" }
+  - { id: nen10, nom: "Nen 10", foto: media/fotos/nen10.jpg, video_entrada: media/entrada/nen10.mp4, mencio: "" }
+  - { id: nen11, nom: "Nen 11", foto: media/fotos/nen11.jpg, video_entrada: media/entrada/nen11.mp4, mencio: "" }
+  - { id: nen12, nom: "Nen 12", foto: media/fotos/nen12.jpg, video_entrada: media/entrada/nen12.mp4, mencio: "" }
+  - { id: nen13, nom: "Nen 13", foto: media/fotos/nen13.jpg, video_entrada: media/entrada/nen13.mp4, mencio: "" }
+  - { id: nen14, nom: "Nen 14", foto: media/fotos/nen14.jpg, video_entrada: media/entrada/nen14.mp4, mencio: "" }
+  - { id: nen15, nom: "Nen 15", foto: media/fotos/nen15.jpg, video_entrada: media/entrada/nen15.mp4, mencio: "" }
+  - { id: nen16, nom: "Nen 16", foto: media/fotos/nen16.jpg, video_entrada: media/entrada/nen16.mp4, mencio: "" }
+  - { id: nen17, nom: "Nen 17", foto: media/fotos/nen17.jpg, video_entrada: media/entrada/nen17.mp4, mencio: "" }
+  - { id: nen18, nom: "Nen 18", foto: media/fotos/nen18.jpg, video_entrada: media/entrada/nen18.mp4, mencio: "" }
+  - { id: nen19, nom: "Nen 19", foto: media/fotos/nen19.jpg, video_entrada: media/entrada/nen19.mp4, mencio: "" }
+  - { id: nen20, nom: "Nen 20", foto: media/fotos/nen20.jpg, video_entrada: media/entrada/nen20.mp4, mencio: "" }
+  - { id: nen21, nom: "Nen 21", foto: media/fotos/nen21.jpg, video_entrada: media/entrada/nen21.mp4, mencio: "" }
+  - { id: nen22, nom: "Nen 22", foto: media/fotos/nen22.jpg, video_entrada: media/entrada/nen22.mp4, mencio: "" }
+  - { id: nen23, nom: "Nen 23", foto: media/fotos/nen23.jpg, video_entrada: media/entrada/nen23.mp4, mencio: "" }
+
+cues:
+  # ---------------------------------------------------------------- 17:05
+  - id: entrada
+    tipus: entrada
+    titol: Entrada triomfal
+    text: "Benvinguts, Picots!"
+    text_final: "Ja hi som tots!"
+    efecte: media/so/entrada.mp3
+    guio: "Digues el nom en veu alta i prem GO. Deixa que acabi el vídeo i l'aplaudiment abans del següent."
+    notes: "Els nens entren per la catifa. Un mestre els fa entrar un a un des de la porta."
+
+  # ---------------------------------------------------------------- 17:25
+  - id: benvinguda
+    tipus: espera
+    titol: Benvinguda i QR
+    text: "La missió secreta està a punt de començar…"
+    musica: media/musica/espera.mp3
+    durada_estimada: "5:00"
+    guio: "Benvinguts a la gala! Avui teniu una missió secreta. Ara us donarem una targeta: escanegeu el QR amb el mòbil o la tauleta i sortirà el vostre nom."
+    notes: "Repartir les targetes QR. Al panell, comprovar que surten tots en verd (MÒBILS 23/23)."
+
+  # ---------------------------------------------------------------- 17:30
+  - id: homenatge
+    tipus: video
+    titol: Homenatge als professors
+    fitxer: media/video/homenatge.mp4
+    guio: "Abans de començar la missió, les famílies tenen un missatge per a algú molt especial…"
+    notes: "Vídeo amb els missatges de les famílies. Després, entrega dels detalls als professors (cue següent)."
+
+  - id: regals
+    tipus: espera
+    titol: Entrega als professors
+    text: "Gràcies, profes! 💛"
+    musica: media/musica/regals.mp3
+    durada_estimada: "8:00"
+    guio: "Demanem als professors que pugin a l'escenari…"
+
+  # ---------------------------------------------------------------- 17:45 Espectacle
+  - id: cap1
+    tipus: video
+    titol: "Capítol 1 – La carta de la Guardiana"
+    fitxer: media/video/cap1.mp4
+    auto: true
+    guio: "Silenci… sembla que ha arribat un missatge."
+
+  - id: vot1
+    tipus: votacio
+    titol: "Votació 1 – Per on entrem al bosc?"
+    pregunta: "Per on entrem al Bosc dels Anys?"
+    temps: 30
+    empat: aleatori
+    per_defecte: 0
+    guio: "Ara decidiu vosaltres! Mireu el mòbil. GO per obrir la votació; quan s'acabi el temps, GO per seguir el camí guanyador."
+    opcions:
+      - { text: "Pel Túnel de les Pintures", va_a: cap2a }
+      - { text: "Pel Pont dels Contes", va_a: cap2b }
+
+  - id: cap2a
+    tipus: video
+    titol: "Capítol 2A – El Túnel de les Pintures"
+    fitxer: media/video/cap2a.mp4
+    auto: true
+    seguent: guardia-p3
+
+  - id: cap2b
+    tipus: video
+    titol: "Capítol 2B – El Pont dels Contes"
+    fitxer: media/video/cap2b.mp4
+    auto: true
+    seguent: guardia-p3
+
+  - id: guardia-p3
+    tipus: video
+    titol: "Pàgina de P3 – el seu guardià"
+    fitxer: media/guardians/p3.mp4
+    rotol: "[Nom] · tutor/a de P3"
+    auto: true
+    guio: "La pàgina de P3 té un guardià… Escoltem-lo!"
+    notes: "Vídeo de comiat del professor/a de P3 (anècdota + missatge). Si no n'hi ha, treure aquesta cue."
+
+  - id: fotos-p3
+    tipus: diapositives
+    titol: "Fotos de P3"
+    carpeta: media/records/p3
+    segons: 3
+    musica: media/musica/records-p3.mp3
+    notes: "GO quan s'hagin vist totes (les fotos fan bucle)."
+
+  - id: guardia-p4
+    tipus: video
+    titol: "Pàgina de P4 – el seu guardià"
+    fitxer: media/guardians/p4.mp4
+    rotol: "[Nom] · tutor/a de P4"
+    auto: true
+    guio: "La pàgina de P4 té un guardià… Escoltem-lo!"
+    notes: "Vídeo de comiat del professor/a de P4 (anècdota + missatge). Si no n'hi ha, treure aquesta cue."
+
+  - id: fotos-p4
+    tipus: diapositives
+    titol: "Fotos de P4"
+    carpeta: media/records/p4
+    segons: 3
+    musica: media/musica/records-p4.mp3
+    notes: "GO quan s'hagin vist totes (les fotos fan bucle)."
+
+  - id: guardia-p5
+    tipus: video
+    titol: "Pàgina de P5 – el seu guardià"
+    fitxer: media/guardians/p5.mp4
+    rotol: "[Nom] · tutor/a de P5"
+    auto: true
+    guio: "La pàgina de P5 té un guardià… Escoltem-lo!"
+    notes: "Vídeo de comiat del professor/a de P5 (anècdota + missatge). Si no n'hi ha, treure aquesta cue."
+
+  - id: fotos-p5
+    tipus: diapositives
+    titol: "Fotos de P5"
+    carpeta: media/records/p5
+    segons: 3
+    musica: media/musica/records-p5.mp3
+    notes: "GO quan s'hagin vist totes (les fotos fan bucle)."
+
+  - id: prova-memoria
+    tipus: questionari
+    titol: "La prova de la memòria"
+    text: "La porta del bosc només s'obre si recordeu…"
+    temps: 20
+    classificacio: 5
+    guio: "La Guardiana ens posa a prova! Llegeix cada pregunta en veu alta i prem GO per deixar respondre. A la solució, explica el record."
+    preguntes:
+      # Substitueix-les per records reals (docs/contingut/preguntes-questionari.md)
+      - { pregunta: "Com es deia la nostra classe a P3?", opcions: ["Opció 1", "Opció 2", "Opció 3", "Opció 4"], correcta: A }
+      - { pregunta: "On vam anar de colònies a P5?", opcions: ["Opció 1", "Opció 2", "Opció 3"], correcta: B }
+      - { pregunta: "Quina mascota teníem a la classe?", opcions: ["Opció 1", "Opció 2", "Opció 3", "Opció 4"], correcta: C }
+      - { pregunta: "Quina obra de teatre vam fer a 2n?", opcions: ["Opció 1", "Opció 2", "Opció 3"], correcta: A }
+      - { pregunta: "Quants nens som a la classe?", opcions: ["21", "23", "25", "27"], correcta: B }
+
+
+  - id: cap3
+    tipus: video
+    titol: "Capítol 3 – El riu dels cursos"
+    fitxer: media/video/cap3.mp4
+    auto: true
+
+  - id: vot2
+    tipus: votacio
+    titol: "Votació 2 – Qui ens ajuda a creuar el riu?"
+    pregunta: "Qui ens ajuda a creuar el riu?"
+    temps: 30
+    empat: aleatori
+    per_defecte: 1
+    guio: "Necessitem ajuda per creuar el riu. Qui triem?"
+    opcions:
+      - { text: "El Drac Dormilega", va_a: cap4a }
+      - { text: "La Tortuga Savia", va_a: cap4b }
+
+  - id: cap4a
+    tipus: video
+    titol: "Capítol 4A – El Drac Dormilega"
+    fitxer: media/video/cap4a.mp4
+    auto: true
+    seguent: guardia-1r
+
+  - id: cap4b
+    tipus: video
+    titol: "Capítol 4B – La Tortuga Savia"
+    fitxer: media/video/cap4b.mp4
+    auto: true
+    seguent: guardia-1r
+
+  - id: guardia-1r
+    tipus: video
+    titol: "Pàgina de 1r – el seu guardià"
+    fitxer: media/guardians/1r.mp4
+    rotol: "[Nom] · tutor/a de 1r"
+    auto: true
+    guio: "La pàgina de 1r té un guardià… Escoltem-lo!"
+    notes: "Vídeo de comiat del professor/a de 1r (anècdota + missatge). Si no n'hi ha, treure aquesta cue."
+
+  - id: fotos-1r
+    tipus: diapositives
+    titol: "Fotos de 1r"
+    carpeta: media/records/1r
+    segons: 3
+    musica: media/musica/records-1r.mp3
+    notes: "GO quan s'hagin vist totes (les fotos fan bucle)."
+
+  - id: guardia-2n
+    tipus: video
+    titol: "Pàgina de 2n – el seu guardià"
+    fitxer: media/guardians/2n.mp4
+    rotol: "[Nom] · tutor/a de 2n"
+    auto: true
+    guio: "La pàgina de 2n té un guardià… Escoltem-lo!"
+    notes: "Vídeo de comiat del professor/a de 2n (anècdota + missatge). Si no n'hi ha, treure aquesta cue."
+
+  - id: fotos-2n
+    tipus: diapositives
+    titol: "Fotos de 2n"
+    carpeta: media/records/2n
+    segons: 3
+    musica: media/musica/records-2n.mp3
+    notes: "GO quan s'hagin vist totes (les fotos fan bucle)."
+
+  - id: guardia-3r
+    tipus: video
+    titol: "Pàgina de 3r – el seu guardià"
+    fitxer: media/guardians/3r.mp4
+    rotol: "[Nom] · tutor/a de 3r"
+    auto: true
+    guio: "La pàgina de 3r té un guardià… Escoltem-lo!"
+    notes: "Vídeo de comiat del professor/a de 3r (anècdota + missatge). Si no n'hi ha, treure aquesta cue."
+
+  - id: fotos-3r
+    tipus: diapositives
+    titol: "Fotos de 3r"
+    carpeta: media/records/3r
+    segons: 3
+    musica: media/musica/records-3r.mp3
+    notes: "GO quan s'hagin vist totes (les fotos fan bucle)."
+
+  - id: guardia-4t
+    tipus: video
+    titol: "Pàgina de 4t – el seu guardià"
+    fitxer: media/guardians/4t.mp4
+    rotol: "[Nom] · tutor/a de 4t"
+    auto: true
+    guio: "La pàgina de 4t té un guardià… Escoltem-lo!"
+    notes: "Vídeo de comiat del professor/a de 4t (anècdota + missatge). Si no n'hi ha, treure aquesta cue."
+
+  - id: fotos-4t
+    tipus: diapositives
+    titol: "Fotos de 4t"
+    carpeta: media/records/4t
+    segons: 3
+    musica: media/musica/records-4t.mp3
+    notes: "GO quan s'hagin vist totes (les fotos fan bucle)."
+
+  - id: guardia-5e
+    tipus: video
+    titol: "Pàgina de 5è – el seu guardià"
+    fitxer: media/guardians/5e.mp4
+    rotol: "[Nom] · tutor/a de 5è"
+    auto: true
+    guio: "La pàgina de 5è té un guardià… Escoltem-lo!"
+    notes: "Vídeo de comiat del professor/a de 5è (anècdota + missatge). Si no n'hi ha, treure aquesta cue."
+
+  - id: fotos-5e
+    tipus: diapositives
+    titol: "Fotos de 5è"
+    carpeta: media/records/5e
+    segons: 3
+    musica: media/musica/records-5e.mp3
+    notes: "GO quan s'hagin vist totes (les fotos fan bucle)."
+
+  - id: guardia-6e
+    tipus: video
+    titol: "Pàgina de 6è – el seu guardià"
+    fitxer: media/guardians/6e.mp4
+    rotol: "[Nom] · tutor/a de 6è"
+    auto: true
+    guio: "La pàgina de 6è té un guardià… Escoltem-lo!"
+    notes: "Vídeo de comiat del professor/a de 6è (anècdota + missatge). Si no n'hi ha, treure aquesta cue."
+
+  - id: fotos-6e
+    tipus: diapositives
+    titol: "Fotos de 6è"
+    carpeta: media/records/6e
+    segons: 3
+    musica: media/musica/records-6e.mp3
+    notes: "GO quan s'hagin vist totes (les fotos fan bucle)."
+
+  - id: altres-guardians
+    tipus: video
+    titol: "Els altres guardians de l'escola"
+    fitxer: media/guardians/altres.mp4
+    rotol: "Els guardians de l'escola"
+    guio: "No només els tutors guarden records… Mireu qui més us vol dir alguna cosa!"
+    notes: "Vídeo conjunt d'especialistes (música, educació física, anglès…), exprofessors, direcció, monitors i personal de l'escola."
+
+  - id: despertar
+    tipus: repte
+    titol: "Repte – Despertem el Llibre!"
+    text: "El Llibre dorm! Toqueu el botó tan ràpid com pugueu per despertar-lo!"
+    modalitat: tocs
+    objectiu: 600
+    temps: 25
+    si_exit: final-especial
+    si_no: final
+    guio: "El llibre ja té totes les pàgines, però dorm. Necessita l'energia de TOTS! Preparats… GO!"
+    notes: "600 tocs en 25 s amb 23 nens és assequible. Si fallen els mòbils: aplaudiments i «Superat»."
+
+  - id: final-especial
+    tipus: video
+    titol: "Final especial – El Llibre complet"
+    fitxer: media/video/final-especial.mp4
+    seguent: diplomes
+
+  - id: final
+    tipus: video
+    titol: "Final – El Llibre s'obre"
+    fitxer: media/video/final.mp4
+
+  # ---------------------------------------------------------------- 18:30
+  - id: diplomes
+    tipus: mencions
+    titol: "Entrega de diplomes"
+    text: "Entrega de diplomes"
+    text_final: "Felicitats, Picots!"
+    efecte: media/so/entrada.mp3
+    guio: "Digues el nom i la menció; el nen surt a recollir el diploma. GO per al següent."
+    diploma:
+      titol: Diploma
+      text: "s'atorga a"
+      peu: "Gala Picots 2027"
+      data: "Juny de 2027"
+      signatures: ["La tutora", "La direcció"]
+
+  - id: mur
+    tipus: mur
+    titol: "Missatges per als profes"
+    text: "Envieu un missatge o un dibuix als profes! 💌"
+    durada_estimada: "5:00"
+    guio: "Ara podeu enviar un missatge o un dibuix als profes des del mòbil o la tauleta!"
+    notes: "Aprovar els missatges al panell (MUR). Després es pot desar el resum de la gala amb tots."
+
+  - id: canco
+    tipus: votacio
+    titol: "Amb quina cançó comencem la festa?"
+    pregunta: "Amb quina cançó comencem la festa?"
+    temps: 20
+    empat: aleatori
+    guio: "Última votació: vosaltres trieu la primera cançó de la festa!"
+    opcions:
+      - { text: "Cançó 1", va_a: fi }
+      - { text: "Cançó 2", va_a: fi }
+      - { text: "Cançó 3", va_a: fi }
+
+  - id: fi
+    tipus: espera
+    titol: Festa!
+    text: "A ballar! 🎉"
+    musica: media/musica/festa.mp3
+    durada_estimada: "1:00"

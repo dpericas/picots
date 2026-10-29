@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
+const { parseDuration } = require('./timing');
 
 const CUE_TYPES = {
   video: 'video',
@@ -50,11 +51,16 @@ function normalizeCue(raw, index, problems) {
     next: raw.seguent != null ? String(raw.seguent) : null,
     notes: raw.notes != null ? String(raw.notes) : null,
     script: raw.guio != null ? String(raw.guio) : null,
+    estimate: parseDuration(raw.durada_estimada),
   };
+  if (raw.durada_estimada != null && cue.estimate == null) {
+    problems.push(problem('error', cue.id, '"durada_estimada" ha de ser segons o "m:ss" (p. ex. 2:30).'));
+  }
   if (cue.type === 'video') {
     cue.file = raw.fitxer || null;
     cue.auto = raw.auto === true;
     cue.fade = raw.fos != null ? Number(raw.fos) : 0;
+    cue.caption = raw.rotol != null ? String(raw.rotol) : null; // rètol a la part de baix (p. ex. qui parla)
     if (!cue.file) problems.push(problem('error', cue.id, 'La cue de vídeo no té "fitxer".'));
     if (!(cue.fade >= 0 && cue.fade <= 10)) {
       problems.push(problem('error', cue.id, '"fos" ha de ser un número de segons entre 0 i 10.'));
