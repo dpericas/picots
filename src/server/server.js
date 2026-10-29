@@ -18,6 +18,8 @@ const { safeResolve, serveFile, sendError } = require('./static');
 const { pickLanAddress, isLoopback } = require('./net');
 const { runPreflight } = require('./preflight');
 const { renderDiplomas } = require('./diplomas');
+const { renderCards } = require('./cards');
+const { renderSummary } = require('./summary');
 
 const WEB_DIR = path.join(__dirname, '..', 'web');
 const PAGES = { '/screen': 'screen', '/control': 'control', '/play': 'play', '/remote': 'remote' };
@@ -245,6 +247,7 @@ async function startServer(opts) {
         ok: true,
         report: runPreflight({
           show, problems, showDir, dataDir, engine, mode, joinUrl: joinUrl(), presenterPin,
+          fixedHost: !!(opts.publicHost || show.network.publicHost),
           clients: Array.from(clients), system: opts.systemInfo ? opts.systemInfo() : null,
         }),
       };
@@ -327,12 +330,20 @@ async function startServer(opts) {
       const file = safeResolve(showDir, p.slice('/show/'.length));
       return file ? serveFile(req, res, file, { cache: true }) : sendError(res, 404);
     }
-    if (p === '/diplomes') {
-      // Com el panell: des d'aquest ordinador o amb el PIN de control.
-      if (!isLoopback(req.socket.remoteAddress) && !(controlPin && url.searchParams.get('pin') === controlPin)) {
-        return sendError(res, 403);
-      }
-      const r = renderDiplomas(show, url.searchParams.get('cue'));
+    // Pàgines d'impressió: com el panell, des d'aquest ordinador o amb el PIN de control.
+    const controlAllowed = () => isLoopback(req.socket.remoteAddress) ||
+      !!(controlPin && url.searchParams.get('pin') === controlPin);
+    if (p === '/resum') {
+      if (!controlAllowed()) return sendError(res, 403);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(renderSummary(engine, { date: timestamp().slice(0, 16), mode }));
+    }
+    if (p === '/diplomes' || p === '/targetes') {
+      if (!controlAllowed()) return sendError(res, 403);
+      const r = p === '/diplomes' ? renderDiplomas(show, url.searchParams.get('cue')) : {
+        status: 200,
+        html: await renderCards({ show, personalUrl, joinUrl: joinUrl(), fixedHost: !!(opts.publicHost || show.network.publicHost) }),
+      };
       res.writeHead(r.status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
       return res.end(r.html);
     }

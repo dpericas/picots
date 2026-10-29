@@ -11,6 +11,7 @@
     "sample-media": "node scripts/make-sample-media.js",
     "simulate": "node scripts/simulate-phones.js",
     "entry-videos": "node scripts/make-entry-videos.js",
+    "backup-video": "electron scripts/make-backup-video.js",
     "test": "node --test test/",
     "dist:win": "electron-builder --win zip --x64"
   },

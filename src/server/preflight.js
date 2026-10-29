@@ -120,7 +120,7 @@ function freeSpace(dir) {
 }
 
 function runPreflight(ctx) {
-  const { show, problems, showDir, dataDir, engine, mode, joinUrl, presenterPin, clients, system } = ctx;
+  const { show, problems, showDir, dataDir, engine, mode, joinUrl, presenterPin, clients, system, fixedHost } = ctx;
   const items = [];
 
   const errors = problems.filter((p) => p.level === 'error').length;
@@ -172,7 +172,11 @@ function runPreflight(ctx) {
   if (!host || host === '127.0.0.1' || host === 'localhost') {
     items.push({ id: 'network', level: 'error', title: 'Sense xarxa', detail: 'El portàtil no té cap adreça a la xarxa local: els mòbils no s\'hi podran connectar.' });
   } else {
-    items.push({ id: 'network', level: 'ok', title: 'Xarxa: ' + joinUrl, detail: 'Els mòbils i tauletes han d\'estar a la mateixa WiFi.' });
+    items.push({
+      id: 'network', level: fixedHost ? 'ok' : 'warn', title: 'Xarxa: ' + joinUrl,
+      detail: 'Els mòbils i tauletes han d\'estar a la mateixa WiFi.' + (fixedHost ? ''
+        : '\nLa IP no està fixada (xarxa.ip_publica): si les targetes QR es van imprimir amb una altra IP, no funcionaran.'),
+    });
   }
 
   const online = new Set(clients.filter((c) => c.role === 'play').map((c) => c.deviceId));

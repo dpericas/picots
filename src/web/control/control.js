@@ -153,7 +153,9 @@
     ])));
   }
   $('btn-preflight').addEventListener('click', preflight);
-  $('btn-diplomas').addEventListener('click', () => window.open('/diplomes' + (pin ? '?pin=' + encodeURIComponent(pin) : ''), '_blank'));
+  const openPrint = (page) => window.open(page + (pin ? '?pin=' + encodeURIComponent(pin) : ''), '_blank');
+  $('btn-diplomas').addEventListener('click', () => openPrint('/diplomes'));
+  $('btn-cards').addEventListener('click', () => openPrint('/targetes'));
   $('btn-preflight-again').addEventListener('click', preflight);
   $('btn-preflight-close').addEventListener('click', () => $('preflight-dialog').close());
   $('btn-test-sound').addEventListener('click', () => send({ name: 'screen.test', what: 'sound' }));

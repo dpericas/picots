@@ -390,3 +390,26 @@ test('Servidor: pàgina de diplomes', async () => {
     fs.rmSync(t.root, { recursive: true, force: true });
   }
 });
+
+test('Servidor: resum de la gala i targetes QR', async () => {
+  const t = tmpShow();
+  const srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet });
+  try {
+    const control = await connect(srv.port, 'role=control');
+    assert.ok((await control.cmd({ name: 'jump', cueId: 'v1' })).ok);
+    assert.ok((await control.cmd({ name: 'vote.force', option: 1, source: 'manual' })).ok);
+    const r = await get(srv.port, '/resum');
+    assert.strictEqual(r.status, 200);
+    assert.ok(r.body.includes('Votacions'));
+    assert.ok(r.body.includes('Y ✔'));
+    const cards = await get(srv.port, '/targetes');
+    assert.strictEqual(cards.status, 200);
+    assert.strictEqual((cards.body.match(/class="card"/g) || []).length, 2, 'una targeta per participant');
+    assert.strictEqual((cards.body.match(/class="card generic"/g) || []).length, 2);
+    assert.strictEqual((cards.body.match(/<svg/g) || []).length, 4);
+    assert.ok(cards.body.includes('ip_publica'), 'avisa que la IP no està fixada');
+  } finally {
+    await srv.close();
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});

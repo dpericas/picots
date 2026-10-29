@@ -25,6 +25,14 @@ function setLogFile(file) {
   fileStream = fs.createWriteStream(file, { flags: 'a' });
 }
 
+// Tanca el fitxer de registre (p. ex. abans d'esborrar la carpeta). Retorna una promesa.
+function closeLogFile() {
+  const stream = fileStream;
+  fileStream = null;
+  if (!stream) return Promise.resolve();
+  return new Promise((resolve) => stream.end(resolve));
+}
+
 function format(args) {
   return args.map((a) => (typeof a === 'string' ? a : util.inspect(a, { depth: 4 }))).join(' ');
 }
@@ -42,4 +50,4 @@ function makeLogger(scope) {
   };
 }
 
-module.exports = { makeLogger, setLogFile, timestamp };
+module.exports = { makeLogger, setLogFile, closeLogFile, timestamp };

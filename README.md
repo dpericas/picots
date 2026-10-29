@@ -216,6 +216,38 @@ Si tots dos premen GO alhora, només s'avança una vegada.
   recupera la seva identitat des de qualsevol mòbil. «Alliberar» deslliga un mòbil.
 - **Nova sessió**: arxiva el diari (`journal-<data>.jsonl`) i comença de zero (per als assajos).
 
+## Targetes QR
+
+Botó **🪪 Targetes QR** del panell, o menú **Gala › Exportar targetes QR a PDF…**: 8 targetes
+per full A4 per retallar, amb la foto, el nom i el QR personal de cada nen, i 2 de reserva amb el
+QR genèric. **Important:** el QR porta l'adreça IP del portàtil. Abans d'imprimir-les, reserva una
+IP fixa per al portàtil al router de la sala i posa-la a `xarxa.ip_publica`; si no, la pàgina i
+«Tot a punt?» ho avisen.
+
+## Vídeo de reserva (pla B sense portàtil)
+
+```bash
+npm run backup-video                                   # -> reserva/gala-reserva.mp4
+npm run backup-video -- --branques=vot1:B --repte=no   # triar branques
+npm run backup-video -- --res=1280x720                 # més ràpid
+```
+
+Tot l'espectacle en un sol MP4 per posar en un USB i reproduir amb VLC en qualsevol ordinador:
+segueix la branca `per_defecte` de cada votació (o la de `--branques`), i les parts interactives
+són targetes fixes (pregunta i resposta del qüestionari, menció de cada nen, repte superat…).
+Té **capítols** per saltar a cada cue (VLC: Reproducció › Capítol) i un índex
+`gala-reserva-index.txt` amb els minuts. Cal ffmpeg 5+. Exemple: 4:22 de vídeo en 33 s a 720p.
+
+## Després de la gala (privacitat)
+
+Menú **Gala**:
+- **Desar resum de la gala…**: pàgina HTML autònoma amb el camí seguit, els resultats de les
+  votacions, el qüestionari i els reptes, i els missatges i dibuixos aprovats del mur.
+- **Esborrar dades després de la gala…**: «Només les dades de la sessió» (diaris de gala i
+  assajos, registres, mur, clau dels QR personals) o «Tot» (també `show/` amb el guió, les fotos i
+  els vídeos, `fonts-entrada/` i `reserva/`). Ofereix desar el resum abans, demana confirmació
+  amb «Entenc que no es pot desfer» i tanca l'app. Només esborra carpetes que reconeix com de l'app.
+
 ## Seguretat
 
 El panell i el projector només accepten connexions des del mateix portàtil, tret que

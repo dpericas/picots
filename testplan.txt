@@ -1,8 +1,8 @@
-PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador; cicle 6: qüestionari, repte, mencions i mur; cicle 7: eines de preparació, assaig i pantalles)
+PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador; cicle 6: qüestionari, repte, mencions i mur; cicle 7: eines de preparació, assaig i pantalles; cicle 8: targetes QR, vídeo de reserva i privacitat)
 ================================================
 
-Proves automàtiques: `npm test` (53 tests: motor, guió, servidor, cues interactives, generador
-de vídeos, assaig, comprovació prèvia i diplomes). Aquest pla cobreix
+Proves automàtiques: `npm test` (57 tests: motor, guió, servidor, cues interactives, generador
+de vídeos, vídeo de reserva, assaig, comprovació prèvia, diplomes, targetes, resum i esborrat). Aquest pla cobreix
 el que els tests no poden verificar (pantalles reals, xarxa, Windows) i, per a cada
 àrea automatitzada, només la prova manual mínima que la confirma en condicions reals.
 
@@ -297,3 +297,33 @@ Method:  1. Menú Gala › Exportar diplomes a PDF… 2. Imprimir-ne un en color
             que es farà servir (A4, sense ajustar a la pàgina).
 Expected Result: Una pàgina A4 apaïsada per nen, en l'ordre de la cue, amb foto, nom, menció,
          peu i signatures; cap text tallat. La impressió conserva el marc daurat i els marges.
+
+------------------------------------------------------------------------------
+T28 – Targetes QR impreses
+Purpose: Verificar que les targetes impreses identifiquen cada nen a la xarxa de la sala.
+Method:  1. Fixar xarxa.ip_publica a la IP reservada del portàtil al router de la sala.
+         2. Menú Gala › Exportar targetes QR a PDF; imprimir a mida real.
+         3. A la sala, escanejar 3 targetes personals i una de reserva amb mòbils i tauletes.
+Expected Result: (2) Sense l'avís d'IP no fixada; 8 targetes per full, retallables per la línia.
+         (3) Cada targeta personal obre l'app ja amb el nom del nen; la de reserva demana triar-lo.
+
+------------------------------------------------------------------------------
+T29 – Vídeo de reserva amb VLC
+Purpose: Verificar el pla B si el portàtil falla.
+Method:  1. npm run backup-video amb el contingut definitiu. 2. Copiar-lo a un USB.
+         3. En un altre ordinador (Windows), obrir-lo amb VLC al projector; saltar per capítols.
+Expected Result: Tot l'espectacle seguit amb so, a pantalla completa, sense talls ni negres
+         llargs; el menú Reproducció › Capítol llista cada cue i cada nen; l'índex .txt coincideix.
+
+------------------------------------------------------------------------------
+T30 – Resum i esborrat després de la gala
+Purpose: Verificar el resum i que l'esborrat elimina les dades personals i res més.
+Method:  1. Després d'un assaig complet: menú Gala › Desar resum de la gala; obrir-lo en un
+            altre ordinador.
+         2. Menú Gala › Esborrar dades… › Només les dades: provar sense marcar la casella;
+            després marcant-la. Tornar a obrir l'app.
+         3. Repetir amb «Tot» en una còpia de la carpeta de la gala.
+Expected Result: (1) El resum es veu sense connexió, amb resultats, camí, missatges i dibuixos.
+         (2) Sense la casella no s'esborra res; amb la casella l'app es tanca i dades\ ja no
+         existeix; en tornar a obrir comença de zero i els QR personals antics ja no serveixen.
+         (3) També desapareixen show\, fonts-entrada\ i reserva\; la resta de fitxers no es toquen.

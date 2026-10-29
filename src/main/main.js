@@ -6,7 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, Menu, dialog, powerSaveBlocker, screen, shell } = require('electron');
 
-const { makeLogger, setLogFile, timestamp } = require('../common/log');
+const { makeLogger, setLogFile, closeLogFile, timestamp } = require('../common/log');
+const { wipeTargets, performWipe } = require('../tools/wipe');
 const { startServer } = require('../server/server');
 
 const log = makeLogger('app');
@@ -120,34 +121,103 @@ function escapeHtml(t) {
   return String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
-// Diplomes: es carrega la pàgina /diplomes en una finestra oculta i es desa en PDF.
-async function exportDiplomas() {
+// Pàgines d'impressió (/diplomes, /targetes): es carreguen en una finestra oculta i es desen en PDF.
+async function exportPdf(page, fileName, landscape) {
   const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });
   try {
     const ready = new Promise((resolve) => {
       const check = () => (win.getTitle() === 'ready' ? resolve() : setTimeout(check, 100));
       win.webContents.once('did-finish-load', check);
     });
-    await win.loadURL(server.localUrl + '/diplomes');
+    await win.loadURL(server.localUrl + page);
     await Promise.race([ready, new Promise((r) => setTimeout(r, 10000))]);
     const pdf = await win.webContents.printToPDF({
-      landscape: true, pageSize: 'A4', printBackground: true, margins: { marginType: 'none' }, preferCSSPageSize: true,
+      landscape, pageSize: 'A4', printBackground: true, margins: { marginType: 'none' }, preferCSSPageSize: true,
     });
     const r = await dialog.showSaveDialog(controlWin, {
-      title: 'Desar els diplomes',
-      defaultPath: path.join(server.dataDir, 'diplomes.pdf'),
+      title: 'Desar el PDF',
+      defaultPath: path.join(server.dataDir, fileName),
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     });
     if (r.canceled || !r.filePath) return;
     fs.writeFileSync(r.filePath, pdf);
-    log.info('Diplomes desats a ' + r.filePath);
+    log.info('PDF desat a ' + r.filePath);
     shell.openPath(r.filePath);
   } catch (err) {
-    log.error('No s\'han pogut exportar els diplomes: ' + err.message);
-    dialog.showErrorBox('Diplomes', 'No s\'han pogut exportar els diplomes:\n\n' + err.message);
+    log.error('No s\'ha pogut exportar ' + page + ': ' + err.message);
+    dialog.showErrorBox('Exportar PDF', 'No s\'ha pogut crear el PDF:\n\n' + err.message);
   } finally {
     win.destroy();
   }
+}
+
+// Resum de la gala (HTML autònom). Retorna true si s'ha desat.
+async function saveSummary() {
+  const r = await dialog.showSaveDialog(controlWin, {
+    title: 'Desar el resum de la gala',
+    defaultPath: path.join(app.getPath('documents'), 'resum-gala-' + timestamp().slice(0, 10) + '.html'),
+    filters: [{ name: 'Pàgina web', extensions: ['html'] }],
+  });
+  if (r.canceled || !r.filePath) return false;
+  const res = await fetch(server.localUrl + '/resum');
+  fs.writeFileSync(r.filePath, await res.text());
+  log.info('Resum desat a ' + r.filePath);
+  return true;
+}
+
+// Privacitat: després de la gala, esborra les dades (i, si es vol, fotos, vídeos i guió).
+async function wipeAfterGala() {
+  const level = dialog.showMessageBoxSync(controlWin, {
+    type: 'warning',
+    title: 'Esborrar dades després de la gala',
+    message: 'Què vols esborrar?',
+    detail: 'Dades de la sessió: diaris de la gala i dels assajos, registres, dibuixos i missatges del mur, ' +
+      'i la clau dels QR personals.\n\nTot: a més, la carpeta de l\'espectacle (guió, fotos i vídeos dels nens), ' +
+      'les fonts dels vídeos d\'entrada i el vídeo de reserva.\n\nNo es pot desfer.',
+    buttons: ['Cancel·lar', 'Només les dades de la sessió', 'Tot'],
+    defaultId: 0,
+    cancelId: 0,
+  });
+  if (level === 0) return;
+  const plan = wipeTargets({ dataDir: server.dataDir, showDir: server.showDir, level: level === 2 ? 'tot' : 'dades' });
+  if (plan.targets.length === 0) {
+    dialog.showMessageBoxSync(controlWin, { type: 'info', message: 'No hi ha res per esborrar.', detail: plan.refused.join('\n') });
+    return;
+  }
+  const keep = dialog.showMessageBoxSync(controlWin, {
+    type: 'question', title: 'Resum', message: 'Vols desar abans el resum de la gala?',
+    detail: 'Una pàgina amb els resultats, el camí seguit i els missatges del mur (amb els noms dels nens).',
+    buttons: ['Sí, desar el resum', 'No'], defaultId: 0, cancelId: 1,
+  });
+  if (keep === 0 && !(await saveSummary())) return;
+  const confirm = await dialog.showMessageBox(controlWin, {
+    type: 'warning', title: 'Confirmació',
+    message: 'S\'esborraran definitivament:',
+    detail: plan.targets.join('\n') + (plan.refused.length ? '\n\nNo s\'esborrarà (no sembla de l\'app):\n' + plan.refused.join('\n') : '') +
+      '\n\nL\'aplicació es tancarà.',
+    checkboxLabel: 'Entenc que no es pot desfer',
+    buttons: ['Cancel·lar', 'Esborrar'], defaultId: 0, cancelId: 0,
+  });
+  if (confirm.response !== 1) return;
+  if (!confirm.checkboxChecked) {
+    dialog.showMessageBoxSync(controlWin, { type: 'info', message: 'No s\'ha esborrat res.', detail: 'Cal marcar «Entenc que no es pot desfer».' });
+    return;
+  }
+  log.warn('Esborrat després de la gala: ' + plan.targets.join(', '));
+  quitting = true;
+  const s = server;
+  server = null;
+  await s.close();
+  await closeLogFile();
+  const result = performWipe(plan.targets);
+  dialog.showMessageBoxSync({
+    type: result.failed.length ? 'error' : 'info',
+    title: 'Esborrat',
+    message: result.failed.length ? 'No s\'ha pogut esborrar tot.' : 'Esborrat completat.',
+    detail: (result.done.length ? 'Esborrat:\n' + result.done.join('\n') : '') +
+      (result.failed.length ? '\n\nError:\n' + result.failed.join('\n') : ''),
+  });
+  app.exit(0);
 }
 
 // Per al panell (comprovació prèvia): pantalles connectades i on és el projector.
@@ -248,7 +318,11 @@ function buildMenu() {
       submenu: [
         { label: 'Obrir carpeta de l\'espectacle', click: () => shell.openPath(server.showDir) },
         { label: 'Obrir carpeta de dades i registres', click: () => shell.openPath(server.dataDir) },
-        { label: 'Exportar diplomes a PDF…', click: exportDiplomas },
+        { label: 'Exportar targetes QR a PDF…', click: () => exportPdf('/targetes', 'targetes-qr.pdf', false) },
+        { label: 'Exportar diplomes a PDF…', click: () => exportPdf('/diplomes', 'diplomes.pdf', true) },
+        { type: 'separator' },
+        { label: 'Desar resum de la gala…', click: () => saveSummary() },
+        { label: 'Esborrar dades després de la gala…', click: wipeAfterGala },
         { type: 'separator' },
         { role: 'quit', label: 'Sortir' },
       ],

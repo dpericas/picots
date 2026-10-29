@@ -89,3 +89,82 @@ test('updateShowText: posa video_entrada i conserva els comentaris', () => {
   assert.ok(r.text.includes('video_entrada: media/entrada/anna.mp4'));
   assert.strictEqual(ev.updateShowText(r.text, { anna: 'media/entrada/anna.mp4' }).changed.length, 0);
 });
+
+const bv = require('../src/tools/backup-video');
+const { parseShow } = require('../src/engine/show');
+
+const BACKUP_SHOW = `
+participants:
+  - { id: a, nom: A, video_entrada: e/a.mp4, mencio: Menció A }
+  - { id: b, nom: B }
+cues:
+  - { id: ent, tipus: entrada }
+  - id: v
+    tipus: votacio
+    pregunta: Q
+    per_defecte: 1
+    opcions: [{ text: X, va_a: x }, { text: Y, va_a: y }]
+  - { id: x, tipus: video, fitxer: x.mp4, seguent: r }
+  - { id: y, tipus: video, fitxer: y.mp4 }
+  - { id: r, tipus: repte, si_exit: extra, si_no: m }
+  - { id: extra, tipus: espera, text: Extra }
+  - { id: m, tipus: mencions }
+`;
+
+test('backup: camí per les branques per defecte o triades', () => {
+  const show = parseShow(BACKUP_SHOW).show;
+  assert.deepStrictEqual(bv.linearPath(show).ids, ['ent', 'v', 'y', 'r', 'extra', 'm']);
+  assert.deepStrictEqual(bv.linearPath(show, { votes: { v: 0 }, challenge: 'fail' }).ids, ['ent', 'v', 'x', 'r', 'm']);
+  // Un bucle al guió no penja el generador.
+  const loop = parseShow(BACKUP_SHOW.replace('si_exit: extra', 'si_exit: v')).show;
+  const r = bv.linearPath(loop);
+  assert.deepStrictEqual(r.ids, ['ent', 'v', 'y', 'r']);
+  assert.match(r.warnings[0], /bucle/);
+});
+
+test('backup: segments i capítols', () => {
+  const show = parseShow(BACKUP_SHOW).show;
+  const ids = bv.linearPath(show).ids;
+  const segs = bv.buildSegments(show, ids, '/s', {});
+  // Entrada: inici, vídeo d'A, targeta de B, final.
+  assert.deepStrictEqual(segs.slice(0, 4).map((s) => s.kind), ['card', 'video', 'card', 'card']);
+  assert.strictEqual(segs[1].file, path.join('/s', 'e/a.mp4'));
+  assert.strictEqual(segs[2].chapter, 'ent · B');
+  const vote = segs.find((s) => s.chapter === 'v');
+  assert.deepStrictEqual(vote.card.items.map((i) => i.mark), [false, true]);
+  const award = segs.find((s) => s.chapter === 'm · A');
+  assert.strictEqual(award.card.subtitle, 'Menció A');
+  const ch = bv.chapters([{ startMs: 0, title: 'Inici' }, { startMs: 65000, title: 'Capítol; 2' }], 90000);
+  assert.ok(ch.meta.startsWith(';FFMETADATA1'));
+  assert.ok(ch.meta.includes('START=65000\nEND=90000\ntitle=Capítol  2'));
+  assert.strictEqual(ch.index, '0:00:00  Inici\n0:01:05  Capítol; 2\n');
+});
+
+const { wipeTargets, performWipe } = require('../src/tools/wipe');
+
+test('wipe: només esborra carpetes que són de l\'app', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gala-wipe-'));
+  try {
+    const mk = (rel) => {
+      fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      fs.writeFileSync(path.join(root, rel), 'x');
+    };
+    mk('dades/journal.jsonl'); mk('dades/registres/gala.log'); mk('show/show.yaml'); mk('show/media/a.jpg');
+    mk('fonts-entrada/anna/01.jpg'); mk('reserva/gala-reserva.mp4'); mk('altres/important.txt');
+    const dataDir = path.join(root, 'dades');
+    const showDir = path.join(root, 'show');
+    assert.deepStrictEqual(wipeTargets({ dataDir, showDir, level: 'dades' }).targets, [dataDir]);
+    const all = wipeTargets({ dataDir, showDir, level: 'tot' });
+    assert.deepStrictEqual(all.targets.map((t) => path.basename(t)), ['dades', 'show', 'fonts-entrada', 'reserva']);
+    // Una carpeta de dades que no ho sembla no es toca.
+    const odd = wipeTargets({ dataDir: path.join(root, 'altres'), showDir, level: 'dades' });
+    assert.deepStrictEqual(odd.targets, []);
+    assert.strictEqual(odd.refused.length, 1);
+    assert.strictEqual(wipeTargets({ dataDir: os.homedir(), showDir, level: 'dades' }).targets.length, 0);
+    const r = performWipe(all.targets);
+    assert.strictEqual(r.failed.length, 0);
+    assert.deepStrictEqual(fs.readdirSync(root), ['altres']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
