@@ -2,7 +2,8 @@
 // Detecta talls en negre entre cues: captura el projector en bucle (~60 per segon)
 // mentre es fan canvis de cue, i compta les captures negres. Els vídeos de prova
 // tenen fons de color, així que qualsevol negre és un tall. Sense so.
-// Ús: npx electron scripts/check-transitions.js --scenario=auto|jump|layers
+// Ús: npx electron scripts/check-transitions.js --scenario=auto|jump|layers|parade [--out=carpeta]
+// Amb --out, desa captures PNG en moments clau.
 // (cal `npm run sample-media` abans). Surt amb codi 1 si troba negres.
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
@@ -11,6 +12,8 @@ const rootArg = process.argv.find((a) => a.startsWith('--root='));
 const root = rootArg ? rootArg.slice(7) : path.join(__dirname, '..');
 const scenarioArg = process.argv.find((a) => a.startsWith('--scenario='));
 const scenario = scenarioArg ? scenarioArg.slice(11) : 'jump';
+const outArg = process.argv.find((a) => a.startsWith('--out='));
+const outDir = outArg ? outArg.slice(6) : null;
 const { startServer } = require(path.join(root, 'src/server/server'));
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 const quiet = { info() {}, warn() {}, error() {} };
@@ -38,6 +41,12 @@ app.whenReady().then(async () => {
     }
   })();
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const snap = async (name) => {
+    if (!outDir) return;
+    const img = await win.webContents.capturePage();
+    require('fs').mkdirSync(outDir, { recursive: true });
+    require('fs').writeFileSync(path.join(outDir, scenario + '-' + name + '.png'), img.toPNG());
+  };
   await wait(800);
   if (scenario === 'auto') {
     e.dispatch({ name: 'jump', cueId: 'cap2a' });   // 8 s, auto -> cap3 (fos 0.8)
@@ -51,6 +60,25 @@ app.whenReady().then(async () => {
     await wait(2500);
     e.dispatch({ name: 'jump', cueId: 'cap2b' });    // fotos -> vídeo no precarregat
     await wait(1500);
+  } else if (scenario === 'parade') {
+    // Entrada amb vídeos (Anna, Biel, Carla i Dani en tenen; Emma i Ferran no).
+    e.dispatch({ name: 'jump', cueId: 'entrada' });
+    await wait(1200);
+    e.dispatch({ name: 'go' });                      // Anna: vídeo de 5 s
+    await wait(2500); await snap('1-anna-video');
+    await wait(3500); await snap('2-anna-targeta');  // el vídeo ja ha acabat
+    e.dispatch({ name: 'go' });                      // Biel: vídeo, confeti a l'inici
+    await wait(1500); await snap('3-biel-video');
+    e.dispatch({ name: 'go' });                      // Carla: vídeo
+    await wait(2000);
+    e.dispatch({ name: 'go' });                      // Dani: vídeo, interromp el de la Carla
+    await wait(1500); await snap('4-dani-video');
+    e.dispatch({ name: 'back' });                    // torna a la Carla (vídeo des de l'inici)
+    await wait(1500);
+    e.dispatch({ name: 'step', step: 5 });           // Emma: sense vídeo, targeta directa
+    await wait(1500); await snap('5-emma-sense-video');
+    e.dispatch({ name: 'step', step: 7 });           // mosaic
+    await wait(2000); await snap('6-mosaic');
   } else if (scenario === 'jump') {
     e.dispatch({ name: 'jump', cueId: 'cap2a' });
     await wait(2500);
@@ -62,7 +90,7 @@ app.whenReady().then(async () => {
   sampling = false;
   await wait(200);
   const firstVideo = events[0] ? events[0].t : 0;
-  const after = samples.filter((s) => s.t > firstVideo + (scenario === 'layers' ? 300 : 600));
+  const after = samples.filter((s) => s.t > firstVideo + (scenario === 'layers' || scenario === 'parade' ? 300 : 600));
   const black = after.filter((s) => s.lum < 3);
   const gaps = after.slice(1).map((s, i) => s.t - after[i].t);
   console.log(JSON.stringify({

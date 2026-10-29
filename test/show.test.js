@@ -58,3 +58,31 @@ test('mediaUrl codifica cada tram i accepta barres de Windows', () => {
   assert.strictEqual(mediaUrl('media\\vídeos\\cap 1.mp4'), '/show/media/v%C3%ADdeos/cap%201.mp4');
   assert.strictEqual(mediaUrl(null), null);
 });
+
+test('Entrada triomfal: per defecte tots els participants; "ordre" validat', () => {
+  const base = `
+participants: [{ id: a, nom: Anna, foto: f/a.jpg }, { id: b, nom: Biel }, { id: c, nom: Carla }]
+cues:
+  - { id: e, tipus: entrada ORDRE }
+`;
+  let r = parseShow(base.replace('ORDRE', ''));
+  assert.deepStrictEqual(r.show.cues[0].people, ['a', 'b', 'c']);
+  assert.strictEqual(hasErrors(r.problems), false);
+
+  r = parseShow(base.replace('ORDRE', ', ordre: [c, x, c]'));
+  const text = msgs(r);
+  assert.match(text, /no existeix: x/);
+  assert.match(text, /repeteix.*c/);
+  assert.match(text, /Anna no surt/);
+  assert.match(text, /Biel no surt/);
+  assert.deepStrictEqual(r.show.cues[0].people, ['c']);
+
+  r = parseShow(base.replace('ORDRE', ''), __dirname);
+  const warns = r.problems.filter((p) => p.level === 'warn').map((p) => p.msg).join('\n');
+  assert.match(warns, /No es troba la foto d.Anna|No es troba la foto de Anna/);
+  assert.match(warns, /Biel no té foto ni avatar/);
+
+  r = parseShow(base.replace('foto: f/a.jpg', 'video_entrada: no/hi/es.mp4').replace('ORDRE', ''), __dirname);
+  assert.ok(r.problems.some((p) => p.level === 'error' && /vídeo d'entrada d.Anna|vídeo d'entrada de Anna/.test(p.msg)));
+  assert.strictEqual(r.show.cues[0].nameOverVideo, true, 'nom sobre el vídeo per defecte');
+});

@@ -4,7 +4,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const el = Gala.el;
-  const TYPE_LABEL = { video: 'VÍDEO', slides: 'FOTOS', vote: 'VOTACIÓ', hold: 'ESPERA' };
+  const TYPE_LABEL = { video: 'VÍDEO', slides: 'FOTOS', vote: 'VOTACIÓ', hold: 'ESPERA', parade: 'ENTRADA' };
   const GO_LABEL = {
     'vote.open': 'obrir votació',
     'vote.close': 'tancar votació',
@@ -70,8 +70,9 @@
   }
 
   // --- Accions ---
-  const go = () => send({ name: 'go' });
-  const back = () => send({ name: 'back' });
+  // expectNav: si el presentador ja ha avançat, aquest GO no en fa un altre.
+  const go = () => send({ name: 'go', expectNav: state && state.state.navSeq });
+  const back = () => send({ name: 'back', expectNav: state && state.state.navSeq });
   const pause = () => send({ name: 'pause' });
   const overlay = (mode) => send({ name: 'overlay', mode: state && state.state.overlay === mode ? 'none' : mode });
 
@@ -96,6 +97,9 @@
     $('recovered').classList.add('hidden');
   });
   $('qr-dialog-close').addEventListener('click', () => $('qr-dialog').close());
+  $('btn-remote-lock').addEventListener('click', () => {
+    send({ name: 'remote.enable', enabled: !(state && state.remote.enabled) });
+  });
 
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea, select') || e.repeat) return;
@@ -147,21 +151,26 @@
     if (cue) meta.push(TYPE_LABEL[cue.type] || cue.type, 'id: ' + cue.id);
     if (s.paused) meta.push('EN PAUSA');
     if (state.position) meta.push('posició ' + formatTime(state.position.t));
+    if (cue && cue.steps) meta.push('pas ' + s.step + '/' + (cue.steps.length - 1) + ': ' + cue.steps[s.step]);
     $('now-meta').textContent = meta.join(' · ');
     $('now-notes').textContent = (cue && cue.notes) || '';
+    $('now-script').textContent = cue && cue.script ? 'Presentador: «' + cue.script + '»' : '';
 
     const g = state.go;
     $('go-label').textContent = g.action === 'enter' ? '→ ' + cueLabel(cueById(g.cueId))
-      : (GO_LABEL[g.action] || g.reason || '');
+      : g.action === 'step' ? '→ ' + g.label
+        : (GO_LABEL[g.action] || g.reason || '');
     $('btn-go').disabled = g.action === 'none';
-    $('btn-back').disabled = !s.started || (s.history.length === 0 && !s.ended);
+    $('btn-back').disabled = !s.started || (s.history.length === 0 && !s.ended && !(s.step > 0));
     $('btn-pause').classList.toggle('active', s.paused);
     $('btn-black').classList.toggle('active', s.overlay === 'black');
     $('btn-hold').classList.toggle('active', s.overlay === 'hold');
     const ov = { none: '', black: 'PANTALLA NEGRA', hold: 'PANTALLA D\'ESPERA' }[s.overlay];
     $('overlay-state').textContent = ov;
     $('overlay-state').className = 'pill' + (ov ? ' warn' : ' hidden');
-    $('next-title').textContent = g.action === 'enter' ? cueLabel(cueById(g.cueId)) : (g.action === 'end' ? 'Fi de l\'espectacle' : '—');
+    $('next-title').textContent = g.action === 'enter' ? cueLabel(cueById(g.cueId))
+      : g.action === 'step' ? g.label
+        : (g.action === 'end' ? 'Fi de l\'espectacle' : '—');
     $('recovered').classList.toggle('hidden', !state.recovered || recoveredDismissed);
   }
 
@@ -192,6 +201,28 @@
     $('btn-vote-extend').disabled = v.status !== 'open';
     $('btn-vote-reset').disabled = v.status === 'pending';
     updateTimer();
+  }
+
+  function renderSteps() {
+    const cue = cueById(state.state.cueId);
+    const steps = cue && cue.steps;
+    $('steps-panel').classList.toggle('hidden', !steps);
+    if (!steps) return;
+    const current = state.state.step;
+    $('steps-pos').textContent = '– ' + current + ' / ' + (steps.length - 1);
+    const box = $('steps');
+    box.textContent = '';
+    steps.forEach((label, i) => {
+      const cls = i === current ? 'current' : i === current + 1 ? 'next' : i < current ? 'done' : '';
+      const hasVideo = cue.stepVideos && cue.stepVideos[i];
+      const b = el('button', {
+        class: cls,
+        text: (i > 0 && i < steps.length - 1 ? i + '. ' : '') + label + (hasVideo ? ' 🎬' : ''),
+        title: hasVideo ? 'Amb vídeo d\'entrada' : null,
+      });
+      b.addEventListener('click', () => send({ name: 'step', step: i }));
+      box.append(b);
+    });
   }
 
   function reasonText(r) {
@@ -229,6 +260,28 @@
       ', mòbils ' + (roles.play || 0);
   }
 
+  function renderRemote() {
+    const r = state.remote;
+    $('remote-status').textContent = r.connected ? '– connectat (' + r.connected + ')' : '– no connectat';
+    $('remote-url').textContent = r.url;
+    $('remote-hint').textContent = r.pinSet
+      ? 'Escaneja-ho amb el mòbil del presentador i entra el PIN (xarxa.pin_presentador).'
+      : 'Cal definir xarxa.pin_presentador a show.yaml per poder-lo fer servir.';
+    const qrSrc = '/api/qr.svg?text=' + encodeURIComponent(r.url);
+    if ($('remote-qr').getAttribute('src') !== qrSrc) $('remote-qr').src = qrSrc;
+    $('btn-remote-lock').textContent = r.enabled ? '🔒 Bloquejar comandament' : '🔓 Desbloquejar comandament';
+    $('btn-remote-lock').classList.toggle('locked', !r.enabled);
+
+    const box = $('alerts');
+    box.textContent = '';
+    r.alerts.forEach((a) => {
+      const ok = el('button', { text: 'Entesos' });
+      ok.addEventListener('click', () => send({ name: 'alert.dismiss', id: a.id }));
+      const time = new Date(a.at).toLocaleTimeString('ca-ES');
+      box.append(el('div', { class: 'alert' }, [el('span', { text: '🆘 PRESENTADOR (' + time + '): ' + a.msg }), ok]));
+    });
+  }
+
   function renderProblems() {
     const list = $('problems');
     list.textContent = '';
@@ -260,7 +313,9 @@
     renderRundown();
     renderNow();
     renderVote();
+    renderSteps();
     renderPhones();
+    renderRemote();
     renderProblems();
   }
 })();

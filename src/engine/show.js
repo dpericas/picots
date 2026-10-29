@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
 
-const CUE_TYPES = { video: 'video', diapositives: 'slides', votacio: 'vote', espera: 'hold' };
+const CUE_TYPES = { video: 'video', diapositives: 'slides', votacio: 'vote', espera: 'hold', entrada: 'parade' };
 const TIE_RULES = { aleatori: 'random', primera: 'first', operador: 'operator' };
 const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 
@@ -36,6 +36,7 @@ function normalizeCue(raw, index, problems) {
     title: raw.titol != null ? String(raw.titol) : null,
     next: raw.seguent != null ? String(raw.seguent) : null,
     notes: raw.notes != null ? String(raw.notes) : null,
+    script: raw.guio != null ? String(raw.guio) : null,
   };
   if (cue.type === 'video') {
     cue.file = raw.fitxer || null;
@@ -69,6 +70,14 @@ function normalizeCue(raw, index, problems) {
       problems.push(problem('error', cue.id, '"per_defecte" ha de ser l\'índex d\'una opció (0..' +
         (cue.options.length - 1) + ').'));
     }
+  } else if (cue.type === 'parade') {
+    cue.text = raw.text != null ? String(raw.text) : '';
+    cue.finalText = raw.text_final != null ? String(raw.text_final) : '';
+    cue.music = raw.musica || null;
+    cue.effect = raw.efecte || null;
+    cue.nameOverVideo = raw.nom_sobre_video !== false;
+    cue.order = Array.isArray(raw.ordre) ? raw.ordre.map(String) : null;
+    cue.people = [];
   } else {
     cue.text = raw.text != null ? String(raw.text) : '';
     cue.music = raw.musica || null;
@@ -81,6 +90,8 @@ function normalize(doc, problems) {
     id: p && p.id != null ? String(p.id) : 'p' + (i + 1),
     name: p && p.nom != null ? String(p.nom) : 'Participant ' + (i + 1),
     avatar: (p && p.avatar) || null,
+    photo: (p && p.foto) || null,
+    entryVideo: (p && p.video_entrada) || null,
   }));
   const cues = (Array.isArray(doc.cues) ? doc.cues : []).map((c, i) => normalizeCue(c || {}, i, problems));
   const net = doc.xarxa || {};
@@ -92,6 +103,7 @@ function normalize(doc, problems) {
       port: net.port != null ? Number(net.port) : 8080,
       publicHost: net.ip_publica || null,
       controlPin: net.pin_control != null ? String(net.pin_control) : null,
+      presenterPin: net.pin_presentador != null ? String(net.pin_presentador) : null,
     },
   };
 }
@@ -119,6 +131,24 @@ function validateRefs(show, problems) {
   for (const p of show.participants) {
     if (pids.has(p.id)) problems.push(problem('error', null, 'Participant amb id repetit: ' + p.id));
     pids.add(p.id);
+  }
+  // Entrada triomfal: per defecte, tots els participants en l'ordre de la llista.
+  for (const cue of show.cues) {
+    if (cue.type !== 'parade') continue;
+    const ids = cue.order || show.participants.map((p) => p.id);
+    const seen = new Set();
+    for (const id of ids) {
+      if (!pids.has(id)) problems.push(problem('error', cue.id, '"ordre" inclou un participant que no existeix: ' + id));
+      else if (seen.has(id)) problems.push(problem('error', cue.id, '"ordre" repeteix un participant: ' + id));
+      else cue.people.push(id);
+      seen.add(id);
+    }
+    if (cue.order) {
+      show.participants.filter((p) => !seen.has(p.id)).forEach((p) => {
+        problems.push(problem('warn', cue.id, p.name + ' no surt a l\'"ordre" de l\'entrada.'));
+      });
+    }
+    if (cue.people.length === 0) problems.push(problem('error', cue.id, 'L\'entrada no té cap participant.'));
   }
   if (show.cues.length === 0) problems.push(problem('error', null, 'El guió no té cap cue.'));
 }
@@ -150,10 +180,24 @@ function resolveMedia(show, showDir, problems) {
     if (cue.music && !exists(cue.music)) {
       problems.push(problem('warn', cue.id, 'No es troba la música: ' + cue.music));
     }
+    if (cue.effect && !exists(cue.effect)) {
+      problems.push(problem('warn', cue.id, 'No es troba l\'efecte de so: ' + cue.effect));
+    }
+    if (cue.type === 'parade') {
+      cue.people.map((id) => show.participants.find((p) => p.id === id))
+        .filter((p) => !p.photo && !p.avatar)
+        .forEach((p) => problems.push(problem('warn', cue.id, p.name + ' no té foto ni avatar: sortiran les inicials.')));
+    }
   }
   for (const p of show.participants) {
     if (p.avatar && !exists(p.avatar)) {
       problems.push(problem('warn', null, 'No es troba l\'avatar de ' + p.name + ': ' + p.avatar));
+    }
+    if (p.entryVideo && !exists(p.entryVideo)) {
+      problems.push(problem('error', null, 'No es troba el vídeo d\'entrada de ' + p.name + ': ' + p.entryVideo));
+    }
+    if (p.photo && !exists(p.photo)) {
+      problems.push(problem('warn', null, 'No es troba la foto de ' + p.name + ': ' + p.photo));
     }
   }
 }

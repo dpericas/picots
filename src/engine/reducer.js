@@ -3,13 +3,20 @@
 // (rellotge, atzar) es resol abans i viatja dins l'event, de manera que
 // reproduir el diari sempre dona el mateix estat.
 
+// Events que canvien "on som" de l'espectacle (no els vots ni la pausa).
+// navSeq permet rebutjar un GO pensat per a un estat que ja ha canviat
+// (p. ex. el tècnic i el presentador prement GO alhora).
+const NAV_EVENTS = ['cue.enter', 'cue.step', 'show.end', 'vote.open', 'vote.close', 'vote.force', 'vote.reset'];
+
 function initialState() {
   return {
     seq: 0,
+    navSeq: 0,
     started: false,
     ended: false,
     cueId: null,
     enterSeq: 0,
+    step: 0, // pas dins la cue actual (entrada triomfal)
     history: [],
     paused: false,
     overlay: 'none', // none | black | hold
@@ -21,15 +28,20 @@ function initialState() {
 function applyEvent(state, ev) {
   const s = structuredClone(state);
   s.seq = ev.seq;
+  if (NAV_EVENTS.includes(ev.type)) s.navSeq = ev.seq;
   switch (ev.type) {
     case 'cue.enter':
       if (ev.via === 'back') s.history.pop();
       else if (ev.via !== 'reenter' && s.cueId) s.history.push(s.cueId);
       s.cueId = ev.cueId;
       s.enterSeq = ev.seq;
+      s.step = 0;
       s.started = true;
       s.ended = false;
       s.paused = false;
+      break;
+    case 'cue.step':
+      s.step = ev.step;
       break;
     case 'show.end':
       s.ended = true;

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#101218">
+  <title>Gala – Presentador</title>
+  <link rel="stylesheet" href="/static/remote/remote.css">
+</head>
+<body>
+  <section id="login" class="hidden">
+    <h1>Comandament del presentador</h1>
+    <p>Escriu el PIN que t'ha donat el tècnic.</p>
+    <input id="pin" type="tel" inputmode="numeric" autocomplete="off" maxlength="12">
+    <button id="pin-ok">Entrar</button>
+    <p id="login-error" class="error"></p>
+  </section>
+
+  <section id="main" class="hidden">
+    <header>
+      <span id="conn" class="pill bad">Connectant…</span>
+      <span id="overlay" class="pill warn hidden"></span>
+      <span id="paused" class="pill warn hidden">PAUSA</span>
+    </header>
+
+    <div id="locked" class="hidden">🔒 El tècnic ha bloquejat el comandament</div>
+
+    <div class="now">
+      <div class="label">ARA</div>
+      <div id="now-title"></div>
+      <div id="now-step"></div>
+    </div>
+
+    <div id="script" class="hidden"></div>
+
+    <div id="vote" class="hidden">
+      <div class="label">VOTACIÓ <span id="vote-status"></span> <span id="vote-timer"></span></div>
+      <div id="vote-question"></div>
+      <div id="vote-options"></div>
+      <div id="vote-voters"></div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="controls">
+      <button id="btn-back">◀ ENRERE<small>toca dos cops</small></button>
+      <button id="btn-go">GO ▶<small id="go-label"></small></button>
+    </div>
+    <div class="help">
+      <button id="btn-help">🆘 Avisar el tècnic</button>
+      <div id="help-options" class="hidden">
+        <button data-msg="Necessito ajuda">Necessito ajuda</button>
+        <button data-msg="Esperem un moment abans de seguir">Esperem un moment</button>
+        <button data-msg="Problema amb els mòbils / la votació">Problema amb els mòbils</button>
+        <button data-msg="No se sent / no es veu bé">No se sent / no es veu</button>
+      </div>
+    </div>
+  </section>
+  <div id="toast" class="hidden"></div>
+  <script src="/static/common/client.js"></script>
+  <script src="/static/remote/remote.js"></script>
+</body>
+</html>

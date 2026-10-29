@@ -289,3 +289,125 @@ test('Precàrrega: cues que poden venir després de l\'actual', () => {
   ok(e, { name: 'jump', cueId: 'fi' });
   assert.deepStrictEqual(e.upcomingCueIds(), []);
 });
+
+const PARADE_SHOW = `
+participants: [{ id: a, nom: Anna }, { id: b, nom: Biel }, { id: c, nom: Carla }]
+cues:
+  - { id: abans, tipus: espera, text: x }
+  - { id: ent, tipus: entrada, ordre: [c, a, b] }
+  - { id: despres, tipus: espera, text: y }
+`;
+
+function paradeEngine() {
+  const r = parseShow(PARADE_SHOW);
+  assert.deepStrictEqual(r.problems.filter((p) => p.level === 'error'), []);
+  return new Engine({ show: r.show, journal: new MemoryJournal(), timers: false });
+}
+
+test('Entrada triomfal: GO passa nen a nen segons "ordre", després mosaic i després la cue següent', () => {
+  const e = paradeEngine();
+  ok(e, { name: 'jump', cueId: 'ent' });
+  assert.strictEqual(e.state.step, 0);
+  const labels = [];
+  while (e.state.cueId === 'ent') {
+    const go = e.describeGo();
+    labels.push(go.action === 'step' ? go.label : '→' + go.cueId);
+    ok(e, { name: 'go' });
+  }
+  assert.deepStrictEqual(labels, ['Carla', 'Anna', 'Biel', 'Tots junts', '→despres']);
+  assert.strictEqual(e.state.step, 0, 'el pas es reinicia en canviar de cue');
+});
+
+test('Entrada triomfal: ENRERE torna al nen anterior; des de la cue següent torna al mosaic', () => {
+  const e = paradeEngine();
+  ok(e, { name: 'jump', cueId: 'abans' });
+  ok(e, { name: 'go' });
+  ok(e, { name: 'go' });
+  ok(e, { name: 'go' });
+  assert.strictEqual(e.state.step, 2);
+  ok(e, { name: 'back' });
+  assert.strictEqual(e.state.step, 1);
+  ok(e, { name: 'back' });
+  ok(e, { name: 'back' });
+  assert.strictEqual(e.state.cueId, 'abans', 'des del pas 0, ENRERE surt de la cue');
+  ok(e, { name: 'go' }); // -> ent
+  ok(e, { name: 'step', step: 4 });
+  ok(e, { name: 'go' }); // -> despres
+  assert.strictEqual(e.state.cueId, 'despres');
+  ok(e, { name: 'back' });
+  assert.strictEqual(e.state.cueId, 'ent');
+  assert.strictEqual(e.state.step, 4, 'torna al mosaic final');
+});
+
+test('Entrada triomfal: saltar a un pas concret, validació i recuperació', () => {
+  const journal = new MemoryJournal();
+  const r = parseShow(PARADE_SHOW);
+  const e = new Engine({ show: r.show, journal, timers: false });
+  fail(e, { name: 'step', step: 1 }, /no té passos/);
+  ok(e, { name: 'jump', cueId: 'ent' });
+  ok(e, { name: 'step', step: 3 });
+  assert.strictEqual(e.state.step, 3);
+  fail(e, { name: 'step', step: 5 }, /Pas no vàlid/);
+  fail(e, { name: 'step', step: 1.5 }, /Pas no vàlid/);
+  ok(e, { name: 'restart' });
+  assert.strictEqual(e.state.step, 0, 'reiniciar la cue torna a l\'inici');
+  ok(e, { name: 'step', step: 2 });
+  const e2 = new Engine({ show: r.show, journal: new MemoryJournal(journal.readAll()), timers: false });
+  assert.deepStrictEqual(e2.state, e.state);
+});
+
+test('Entrada amb vídeos: precarrega el vídeo del nen següent i la posició va lligada al pas', () => {
+  const { screenView } = require('../src/engine/views');
+  const r = parseShow(`
+participants:
+  - { id: a, nom: Anna, video_entrada: v/a.mp4 }
+  - { id: b, nom: Biel }
+  - { id: c, nom: Carla, video_entrada: v/c.mp4 }
+cues:
+  - { id: ent, tipus: entrada }
+  - { id: fi, tipus: video, fitxer: v/fi.mp4 }
+`);
+  const e = new Engine({ show: r.show, journal: new MemoryJournal(), timers: false });
+  const preload = () => screenView(e, {}).preload;
+  ok(e, { name: 'jump', cueId: 'ent' });
+  assert.deepStrictEqual(preload(), ['/show/v/a.mp4'], 'a l\'inici, el vídeo de l\'Anna');
+  ok(e, { name: 'go' });
+  assert.deepStrictEqual(screenView(e, {}).cue.people.map((p) => p.video), ['/show/v/a.mp4', null, '/show/v/c.mp4']);
+  assert.deepStrictEqual(preload(), [], 'en Biel no té vídeo');
+  ok(e, { name: 'go' });
+  assert.deepStrictEqual(preload(), ['/show/v/c.mp4']);
+  ok(e, { name: 'go' });
+  assert.deepStrictEqual(preload(), ['/show/v/fi.mp4'], 'des de l\'últim nen, la cue següent');
+
+  // Posició: només s'accepta la del pas actual i s'esborra en canviar de pas.
+  e.setPosition({ cueId: 'ent', enterSeq: e.state.enterSeq, step: 2, t: 4 });
+  assert.strictEqual(e.position, null, 'posició d\'un altre pas ignorada');
+  e.setPosition({ cueId: 'ent', enterSeq: e.state.enterSeq, step: 3, t: 4 });
+  assert.strictEqual(e.position.t, 4);
+  const resumed = new Engine({
+    show: r.show, journal: new MemoryJournal(e.journal.readAll()), timers: false, position: e.position,
+  });
+  assert.strictEqual(resumed.resume.step, 3, 'després d\'una caiguda es reprèn el vídeo del mateix nen');
+  ok(e, { name: 'go' });
+  assert.strictEqual(e.position, null);
+});
+
+test('Doble GO (tècnic i presentador alhora): només s\'avança una vegada', () => {
+  const e = makeEngine();
+  claimAll(e);
+  ok(e, { name: 'go' });
+  const seen = e.state.navSeq;
+  ok(e, { name: 'go', expectNav: seen }); // el primer arriba: intro -> v1
+  fail(e, { name: 'go', expectNav: seen }, /Ja s'ha avançat/); // el segon, amb l'estat vell
+  assert.strictEqual(e.state.cueId, 'v1');
+  fail(e, { name: 'back', expectNav: seen }, /Ja s'ha avançat/);
+  // Els vots no compten com a "avançar": un GO pensat abans dels vots continua valent.
+  ok(e, { name: 'vote.open' });
+  const before = e.state.navSeq;
+  ok(e, { name: 'ballot', deviceId: 'da', option: 0 });
+  ok(e, { name: 'ballot', deviceId: 'db', option: 1 });
+  assert.strictEqual(e.state.navSeq, before);
+  ok(e, { name: 'go', expectNav: before });
+  assert.strictEqual(e.state.votes.v1.status, 'closed');
+  ok(e, { name: 'go' }, 'sense expectNav (p. ex. avançament automàtic) no hi ha comprovació');
+});

@@ -44,13 +44,32 @@ Opcions: `--show=<carpeta>` i `--data=<carpeta>`.
 
 ## El guió (`show/show.yaml`)
 
-Cada pas de l'espectacle és una **cue**: `video`, `diapositives`, `votacio` o `espera`.
+Cada pas de l'espectacle és una **cue**: `video`, `diapositives`, `votacio`, `espera` o `entrada`.
 Les votacions defineixen a quina cue va cada opció (`va_a`). Els detalls i un exemple
 complet són al mateix `show.yaml`. Després d'editar-lo, clica **Recarregar guió**: si té
 errors, es manté la versió anterior i el panell mostra què falla.
 
 Format de vídeo recomanat: MP4 H.264 + AAC, 1920x1080 o 1280x720,
 amb `-movflags +faststart`.
+
+### Entrada triomfal
+
+La cue `entrada` es fa per passos: pantalla d'inici (`text`), un pas per cada nen (la seva
+`foto` i el nom en gran, amb confeti i l'`efecte` de so) i un mosaic final amb tots
+(`text_final`). GO passa al següent nen, ENRERE torna a l'anterior, i el panell mostra un
+botó per a cada nen per saltar-hi directament. L'ordre és el de `participants`, o el de
+`ordre` si es vol un altre. Les fotos han de ser verticals (3:4), amb la cara al terç superior;
+si un nen no en té, surt el seu avatar o les inicials (i el panell ho avisa).
+
+Cada nen pot tenir un **vídeo d'entrada** (`video_entrada`: el resum del seu pas per l'escola,
+amb la seva música integrada). Llavors, al seu pas, GO reprodueix el vídeo a pantalla completa
+amb el nom a sota (`nom_sobre_video: false` per treure'l) i, quan acaba, surt la seva targeta
+fins al GO següent. El vídeo del nen següent ja està precarregat (sense talls), la música de
+fons de la cue calla mentre sonen, i si el projector es reinicia, el vídeo es reprèn on era.
+El panell marca amb 🎬 els nens que tenen vídeo.
+
+Durada: amb 23 nens i la franja de 20 minuts del planning (17:05–17:25) hi ha uns 50 s per nen,
+comptant el temps de dir el nom i caminar. Recomanació: vídeos d'entrada de 25–35 s.
 
 ### Pas sense talls entre vídeos
 
@@ -68,6 +87,7 @@ Comprovació automàtica (captura el projector ~60 cops per segon, sense so):
 npx electron scripts/check-transitions.js --scenario=auto     # vídeo → vídeo amb fos
 npx electron scripts/check-transitions.js --scenario=jump     # salts i ENRERE
 npx electron scripts/check-transitions.js --scenario=layers   # espera/fotos ↔ vídeo
+npx electron scripts/check-transitions.js --scenario=parade   # entrada amb vídeos de nens
 ```
 
 ## Panell de control
@@ -84,6 +104,15 @@ npx electron scripts/check-transitions.js --scenario=layers   # espera/fotos ↔
 
 Menú **Projector**: moure'l a una altra pantalla (Ctrl+Shift+M), pantalla completa
 (Ctrl+Shift+F) i recarregar-lo (Ctrl+Shift+R).
+
+## Comandament del presentador
+
+El presentador porta el seu mòbil amb `http://<ip>:8080/remote` (QR a la targeta «PRESENTADOR»
+del panell) i entra el PIN de `xarxa.pin_presentador`. Hi veu on som (i el nen actual a l'entrada),
+el text que ha de dir (camp `guio` de cada cue), què farà GO, i l'estat de la votació. Pot fer
+**GO** i **ENRERE** (doble toc) i **avisar el tècnic** (franja vermella al panell, sense so).
+No pot saltar, forçar votacions ni res més. El tècnic el pot **bloquejar** des del panell.
+Si tots dos premen GO alhora, només s'avança una vegada.
 
 ## Plans B inclosos
 

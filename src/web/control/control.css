@@ -20,7 +20,18 @@ header h1 { font-size: 18px; margin: 0; flex: 1; }
 .pill.warn { background: var(--warn); color: #000; }
 .hidden { display: none !important; }
 .banner { background: var(--warn); color: #000; padding: 8px 16px; font-weight: 600; }
-main { display: grid; grid-template-columns: 300px 1fr 360px; gap: 12px; padding: 12px; height: calc(100vh - 50px); }
+/* Avisos del presentador: visibles però sense so (l'àudio del portàtil va a la sala). */
+.alert {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px; font-weight: 700; font-size: 17px;
+  background: var(--bad); color: #fff; animation: alert-blink 1s step-end infinite;
+}
+.alert span { flex: 1; }
+.alert button { background: #fff; color: #000; }
+@keyframes alert-blink { 50% { background: #8c1d20; } }
+#now-script { margin-top: 6px; color: var(--muted); white-space: pre-wrap; font-style: italic; }
+#remote-qr { width: 96px; height: 96px; background: #fff; border-radius: 4px; }
+#btn-remote-lock.locked { background: var(--bad); border-color: var(--bad); color: #fff; }
+main { display: grid; grid-template-columns: 300px 1fr 360px; gap: 12px; padding: 12px; height: calc(100vh - 50px); min-height: 0; }
 section { overflow-y: auto; min-width: 0; }
 h2 { font-size: 13px; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
 h2 small { text-transform: none; }
@@ -61,6 +72,11 @@ button.armed { background: var(--bad); color: #fff; }
 button.active { outline: 3px solid var(--warn); }
 .panic button { flex: 1; }
 
+#steps { display: flex; flex-wrap: wrap; gap: 6px; }
+#steps button { padding: 6px 10px; }
+#steps button.done { color: var(--muted); }
+#steps button.current { background: var(--go); border-color: var(--go); color: #fff; }
+#steps button.next { border-color: var(--warn); }
 #vote-question { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
 #vote-timer { color: var(--warn); font-size: 16px; }
 #vote-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }

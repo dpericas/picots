@@ -13,6 +13,7 @@
     <span id="overlay-state" class="pill"></span>
     <span id="clock"></span>
   </header>
+  <div id="alerts"></div>
   <div id="recovered" class="banner hidden">
     Sessió recuperada després d'un tancament. Comprova la cue actual i continua amb GO o salta on calgui.
     <button id="recovered-ok">Entesos</button>
@@ -29,6 +30,7 @@
         <div id="now-title">—</div>
         <div id="now-meta"></div>
         <div id="now-notes"></div>
+        <div id="now-script"></div>
       </div>
       <div class="buttons main">
         <button id="btn-back" class="big" title="Shift+←">◀ ENRERE</button>
@@ -57,6 +59,12 @@
         <p class="hint">Si els mòbils fallen: vot a mà alçada i clica «Mà alçada» a l'opció guanyadora.</p>
       </div>
 
+      <div id="steps-panel" class="card hidden">
+        <div class="label">ENTRADA TRIOMFAL <span id="steps-pos"></span></div>
+        <div id="steps"></div>
+        <p class="hint">GO = següent nen · ENRERE = l'anterior · clic per saltar a qualsevol.</p>
+      </div>
+
       <div class="card">
         <div class="label">PROPERA</div>
         <div id="next-title">—</div>
@@ -71,6 +79,14 @@
           <div><code id="join-url"></code><p class="hint">Projector i panell: <span id="client-roles"></span></p></div>
         </div>
         <ul id="participants"></ul>
+      </div>
+      <div class="card">
+        <div class="label">PRESENTADOR <span id="remote-status"></span></div>
+        <div class="join">
+          <img id="remote-qr" alt="QR del comandament">
+          <div><code id="remote-url"></code><p class="hint" id="remote-hint"></p></div>
+        </div>
+        <div class="buttons"><button id="btn-remote-lock">🔒 Bloquejar comandament</button></div>
       </div>
       <div class="card">
         <div class="label">AVISOS</div>

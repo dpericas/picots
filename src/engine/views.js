@@ -9,7 +9,7 @@ function participantPublic(p) {
   return { id: p.id, name: p.name, avatar: mediaUrl(p.avatar) };
 }
 
-function cuePublic(cue) {
+function cuePublic(cue, show) {
   if (!cue) return null;
   const out = { id: cue.id, type: cue.type, title: cue.title };
   if (cue.type === 'video') {
@@ -23,6 +23,16 @@ function cuePublic(cue) {
   } else if (cue.type === 'vote') {
     out.question = cue.question;
     out.options = cue.options.map((o) => o.text);
+  } else if (cue.type === 'parade') {
+    out.text = cue.text;
+    out.finalText = cue.finalText;
+    out.music = mediaUrl(cue.music);
+    out.effect = mediaUrl(cue.effect);
+    out.nameOverVideo = cue.nameOverVideo;
+    out.people = cue.people.map((id) => {
+      const p = show.participants.find((x) => x.id === id);
+      return { id, name: p.name, photo: mediaUrl(p.photo || p.avatar), video: mediaUrl(p.entryVideo) };
+    });
   } else {
     out.text = cue.text;
     out.music = mediaUrl(cue.music);
@@ -55,8 +65,9 @@ function screenView(engine, extra) {
     title: engine.show.title,
     started: s.started,
     ended: s.ended,
-    cue: cuePublic(cue),
+    cue: cuePublic(cue, engine.show),
     enterSeq: s.enterSeq,
+    step: s.step,
     paused: s.paused,
     overlay: s.overlay,
     vote: voteSummary(engine, cue),
@@ -68,6 +79,13 @@ function screenView(engine, extra) {
 
 // Vídeos que el projector ha de tenir carregats per poder-hi passar sense talls.
 function preloadSources(engine) {
+  const cue = engine.currentCue();
+  const step = engine.state.step;
+  // Entrada triomfal: el vídeo del nen següent (el pas k mostra people[k-1]).
+  if (cue && cue.type === 'parade' && step < cue.people.length) {
+    const next = engine.show.participants.find((p) => p.id === cue.people[step]);
+    return next && next.entryVideo ? [mediaUrl(next.entryVideo)] : [];
+  }
   return engine.upcomingCueIds()
     .map((id) => engine.cue(id))
     .filter((c) => c && c.type === 'video')
@@ -100,6 +118,48 @@ function playView(engine, deviceId) {
   };
 }
 
+// Comandament del presentador: on som, què ve, què ha de dir i l'estat de la votació.
+function remoteView(engine, extra) {
+  const s = engine.state;
+  const cue = engine.currentCue();
+  const go = engine.describeGo();
+  let nextLabel = null;
+  if (go.action === 'enter') {
+    const next = engine.cue(go.cueId);
+    nextLabel = next ? (next.title || next.id) : go.cueId;
+  } else if (go.action === 'step') nextLabel = go.label;
+  else if (go.action === 'vote.open') nextLabel = 'Obrir la votació';
+  else if (go.action === 'vote.close') nextLabel = 'Tancar la votació';
+  else if (go.action === 'end') nextLabel = 'Fi de l\'espectacle';
+  const vote = voteSummary(engine, cue);
+  return {
+    serverNow: engine.now(),
+    title: engine.show.title,
+    navSeq: s.navSeq || 0,
+    enabled: extra.enabled,
+    started: s.started,
+    ended: s.ended,
+    paused: s.paused,
+    overlay: s.overlay,
+    cue: cue ? {
+      id: cue.id,
+      type: cue.type,
+      title: cue.title || cue.id,
+      script: cue.script,
+      stepLabel: engine.stepCount(cue) ? engine.stepLabel(cue, s.step) : null,
+      stepPos: engine.stepCount(cue) ? s.step + '/' + (engine.stepCount(cue) - 1) : null,
+    } : null,
+    go: { action: go.action, label: nextLabel, reason: go.reason || null },
+    canBack: s.started && (s.history.length > 0 || s.ended || s.step > 0),
+    vote: vote && Object.assign({}, vote, {
+      question: cue.question,
+      options: cue.options.map((o) => o.text),
+      voters: vote.voters.length,
+      expected: Object.keys(s.claims).length,
+    }),
+  };
+}
+
 function controlView(engine, extra) {
   const s = engine.state;
   const cue = engine.currentCue();
@@ -111,14 +171,21 @@ function controlView(engine, extra) {
       type: c.type,
       title: c.title,
       notes: c.notes,
+      script: c.script,
       options: c.type === 'vote' ? c.options.map((o) => ({ text: o.text, goto: o.goto })) : undefined,
       next: c.type === 'vote' ? null : engine.linearNext(c),
+      steps: engine.stepCount(c) ? Array.from({ length: engine.stepCount(c) }, (_, i) => engine.stepLabel(c, i)) : undefined,
+      stepVideos: c.type === 'parade'
+        ? [false].concat(c.people.map((id) => !!engine.show.participants.find((p) => p.id === id).entryVideo), [false])
+        : undefined,
     })),
     state: {
       seq: s.seq,
+      navSeq: s.navSeq || 0,
       started: s.started,
       ended: s.ended,
       cueId: s.cueId,
+      step: s.step,
       history: s.history,
       paused: s.paused,
       overlay: s.overlay,
@@ -132,10 +199,11 @@ function controlView(engine, extra) {
       personalUrl: extra.personalUrl(p.id),
     })),
     problems: extra.problems,
+    remote: extra.remote,
     clients: extra.clients,
     mediaErrors: extra.mediaErrors,
     joinUrl: extra.joinUrl,
   };
 }
 
-module.exports = { screenView, playView, controlView };
+module.exports = { screenView, playView, controlView, remoteView };

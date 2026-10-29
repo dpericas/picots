@@ -39,7 +39,7 @@ class Engine extends EventEmitter {
     this.recovered = events.length > 0;
     // Punt on reprendre el vídeo després d'una recuperació.
     const p = opts.position;
-    this.resume = p && p.cueId === this.state.cueId && p.enterSeq === this.state.enterSeq ? p : null;
+    this.resume = this.matchesPosition(p) ? p : null;
     this.position = this.resume;
     this.syncTimers();
   }
@@ -64,6 +64,18 @@ class Engine extends EventEmitter {
     return i >= 0 && i + 1 < this.show.cues.length ? this.show.cues[i + 1].id : null;
   }
 
+  // Nombre de passos d'una cue (0 = no en té). Entrada: inici + un per nen + mosaic.
+  stepCount(cue) {
+    return cue && cue.type === 'parade' ? cue.people.length + 2 : 0;
+  }
+
+  stepLabel(cue, step) {
+    if (step === 0) return 'Inici';
+    if (step > cue.people.length) return 'Tots junts';
+    const p = this.show.participants.find((x) => x.id === cue.people[step - 1]);
+    return p ? p.name : cue.people[step - 1];
+  }
+
   // Què farà el botó GO, per mostrar-ho al panell.
   describeGo() {
     const s = this.state;
@@ -71,6 +83,9 @@ class Engine extends EventEmitter {
     if (s.ended) return { action: 'none' };
     const cue = this.currentCue();
     if (!cue) return { action: 'none' };
+    if (s.step < this.stepCount(cue) - 1) {
+      return { action: 'step', step: s.step + 1, label: this.stepLabel(cue, s.step + 1) };
+    }
     if (cue.type === 'vote') {
       const v = s.votes[cue.id];
       if (!v) return { action: 'vote.open' };
@@ -103,7 +118,7 @@ class Engine extends EventEmitter {
     const nextState = applyEvent(this.state, ev);
     this.journal.append(ev);
     this.state = nextState;
-    if (type === 'cue.enter') {
+    if (type === 'cue.enter' || type === 'cue.step') {
       this.resume = null;
       this.position = null;
     }
@@ -135,20 +150,45 @@ class Engine extends EventEmitter {
 
   execute(cmd) {
     const s = this.state;
+    // GO/ENRERE amb expectNav: només si ningú no ha avançat des que es va prémer.
+    if ((cmd.name === 'go' || cmd.name === 'back') && cmd.expectNav != null && cmd.expectNav !== (s.navSeq || 0)) {
+      throw new CommandError('Ja s\'ha avançat (algú altre ha premut). Mira on som i torna-ho a provar.');
+    }
     switch (cmd.name) {
       case 'go': {
         const go = this.describeGo();
         if (go.action === 'enter') this.enter(go.cueId, s.started ? 'go' : 'start');
+        else if (go.action === 'step') this.record('cue.step', { cueId: s.cueId, step: go.step });
         else if (go.action === 'vote.open') this.openVote(this.currentCue());
         else if (go.action === 'vote.close') this.closeVote(this.currentCue(), 'operator');
         else if (go.action === 'end') this.record('show.end', {});
         else throw new CommandError(go.reason || 'No hi ha res a fer amb GO.');
         return;
       }
-      case 'back':
+      case 'back': {
         if (s.ended) return this.enter(s.cueId, 'reenter');
+        // Dins d'una cue amb passos, ENRERE torna al pas anterior.
+        if (s.step > 0 && this.stepCount(this.currentCue()) > 0) {
+          this.record('cue.step', { cueId: s.cueId, step: s.step - 1 });
+          return;
+        }
         if (s.history.length === 0) throw new CommandError('No hi ha cap cue anterior.');
-        return this.enter(s.history[s.history.length - 1], 'back');
+        const target = s.history[s.history.length - 1];
+        this.enter(target, 'back');
+        // Tornant a una cue amb passos, es torna al darrer pas (on s'havia quedat).
+        const count = this.stepCount(this.cue(target));
+        if (count > 1) this.record('cue.step', { cueId: target, step: count - 1 });
+        return;
+      }
+      case 'step': {
+        const cue = this.currentCue();
+        const count = this.stepCount(cue);
+        if (!count) throw new CommandError('Aquesta cue no té passos.');
+        const step = Number(cmd.step);
+        if (!(Number.isInteger(step) && step >= 0 && step < count)) throw new CommandError('Pas no vàlid.');
+        if (step !== s.step) this.record('cue.step', { cueId: cue.id, step });
+        return;
+      }
       case 'jump':
         return this.enter(cmd.cueId, s.started ? 'jump' : 'start');
       case 'restart':
@@ -279,9 +319,15 @@ class Engine extends EventEmitter {
     this.record('participant.claim', { participantId, deviceId });
   }
 
+  // Una posició de vídeo només val per a la mateixa entrada a la cue i el mateix pas.
+  matchesPosition(pos) {
+    return !!pos && pos.cueId === this.state.cueId && pos.enterSeq === this.state.enterSeq &&
+      (pos.step || 0) === this.state.step;
+  }
+
   setPosition(pos) {
-    if (pos && pos.cueId === this.state.cueId && pos.enterSeq === this.state.enterSeq && Number(pos.t) >= 0) {
-      this.position = { cueId: pos.cueId, enterSeq: pos.enterSeq, t: Number(pos.t) };
+    if (this.matchesPosition(pos) && Number(pos.t) >= 0) {
+      this.position = { cueId: pos.cueId, enterSeq: pos.enterSeq, step: pos.step || 0, t: Number(pos.t) };
     }
   }
 

@@ -55,13 +55,15 @@
         p.resolve(msg);
       }
     };
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       this.setConnected(false);
       Object.keys(this.pending).forEach((id) => {
         clearTimeout(this.pending[id].timer);
         this.pending[id].resolve({ ok: false, error: 'Sense connexió' });
       });
       this.pending = {};
+      // onClose pot aturar la reconnexió (p. ex. PIN incorrecte) retornant false.
+      if (this.opts.onClose && this.opts.onClose(e.code) === false) return;
       setTimeout(() => this.connect(), this.delay);
       this.delay = Math.min(this.delay * 2, 5000);
     };

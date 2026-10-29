@@ -8,7 +8,12 @@
 #   votacio      pregunta, opcions [{text, va_a}], temps (s, 0 = sense límit),
 #                empat (aleatori | primera | operador), per_defecte (opció si ningú vota)
 #   espera       text, musica
-# Comuns: id (obligatori), titol, seguent (si no, la de sota), notes (només al panell)
+#   entrada      entrada triomfal: GO passa nen a nen (foto + nom), i al final mosaic amb tots.
+#                text (pantalla inicial), text_final (sobre el mosaic), musica (de fons, en bucle),
+#                efecte (so curt a cada nen sense vídeo), ordre (llista d'ids; per defecte, tots),
+#                nom_sobre_video (true per defecte: el nom surt a sota mentre sona el vídeo del nen)
+# Comuns: id (obligatori), titol, seguent (si no, la de sota), notes (només al panell del tècnic),
+#         guio (el que ha de dir el presentador: surt al seu comandament)
 
 titol: Gala Picots 2027
 
@@ -16,20 +21,37 @@ xarxa:
   port: 8080
   # ip_publica: 192.168.50.10   # força l'adreça dels QR si n'hi ha més d'una
   # pin_control: "4321"         # permet obrir /control des d'un altre aparell: /control?pin=4321
+  pin_presentador: "2027"       # PIN del comandament del presentador (/remote al seu mòbil)
 
+# foto: foto actual per a l'entrada triomfal (vertical 3:4, la cara al terç superior).
+# video_entrada: resum del seu pas per l'escola (amb la seva música integrada). A l'entrada
+#   triomfal es reprodueix amb el nom a sobre i, en acabar, surt la targeta amb la foto.
+# avatar: dibuix del personatge del conte (votacions). Si no hi ha foto, s'usa l'avatar.
 participants:
-  - { id: anna,  nom: Anna }
-  - { id: biel,  nom: Biel }
-  - { id: carla, nom: Carla }
-  - { id: dani,  nom: Dani }
-  - { id: emma,  nom: Emma }
-  - { id: ferran, nom: Ferran }
+  - { id: anna,   nom: Anna,   foto: media/fotos/anna.jpg,  video_entrada: media/entrada/anna.mp4 }
+  - { id: biel,   nom: Biel,   foto: media/fotos/biel.jpg,  video_entrada: media/entrada/biel.mp4 }
+  - { id: carla,  nom: Carla,  foto: media/fotos/carla.jpg, video_entrada: media/entrada/carla.mp4 }
+  - { id: dani,   nom: Dani,   foto: media/fotos/dani.jpg,  video_entrada: media/entrada/dani.mp4 }
+  - { id: emma,   nom: Emma,   foto: media/fotos/emma.jpg }
+  - { id: ferran, nom: Ferran, foto: media/fotos/ferran.jpg }
 
 cues:
+  - id: entrada
+    tipus: entrada
+    titol: Entrada triomfal
+    text: "Benvinguts, Picots!"
+    text_final: "Ja hi som tots!"
+    efecte: media/so/entrada.mp3
+    # musica: media/musica/entrada.mp3
+    # ordre: [anna, biel, carla, dani, emma, ferran]
+    notes: "Els nens entren per la catifa quan el presentador diu el nom. GO just quan comença a dir-lo."
+    guio: "Digues el nom en veu alta i prem GO. Espera que acabi el vídeo i l'aplaudiment abans del següent."
+
   - id: benvinguda
     tipus: espera
     titol: Benvinguda
     text: "La missió secreta està a punt de començar…"
+    guio: "Benvinguts! Repartim els codis QR: escanegeu-lo i trieu el vostre nom. Quan tothom estigui a punt, GO."
     notes: "El presentador reparteix els QR. Esperar que tothom estigui connectat."
 
   - id: cap1
@@ -43,6 +65,7 @@ cues:
     titol: "Votació 1 – Quina porta?"
     pregunta: "Quina porta obrim?"
     temps: 30
+    guio: "Ara decidiu vosaltres! GO per obrir la votació; quan s'acabi el temps, GO per veure on anem."
     empat: aleatori
     per_defecte: 0
     opcions:

@@ -13,14 +13,15 @@ const { makeLogger, timestamp } = require('../common/log');
 const { Engine } = require('../engine/engine');
 const { FileJournal } = require('../engine/journal');
 const { loadShow, hasErrors } = require('../engine/show');
-const { screenView, playView, controlView } = require('../engine/views');
+const { screenView, playView, controlView, remoteView } = require('../engine/views');
 const { safeResolve, serveFile, sendError } = require('./static');
 const { pickLanAddress, isLoopback } = require('./net');
 
 const WEB_DIR = path.join(__dirname, '..', 'web');
-const PAGES = { '/screen': 'screen', '/control': 'control', '/play': 'play' };
+const PAGES = { '/screen': 'screen', '/control': 'control', '/play': 'play', '/remote': 'remote' };
 const ROLE_COMMANDS = {
   play: ['claim', 'ballot', 'release'],
+  remote: ['go', 'back', 'remote.alert'],
   screen: ['video.ended', 'video.position', 'media.error'],
 };
 const POSITION_SAVE_MS = 2000;
@@ -86,6 +87,9 @@ async function startServer(opts) {
   const network = loaded.show.network;
   const port = opts.port != null ? opts.port : network.port;
   const controlPin = opts.controlPin || network.controlPin;
+  const presenterPin = opts.presenterPin || network.presenterPin;
+  // Comandament del presentador: el tècnic el pot bloquejar; els avisos li arriben al panell.
+  const remote = { enabled: true, alerts: [], nextAlertId: 1 };
   const mediaErrors = [];
   const clients = new Set();
   let publicBase = null;
@@ -99,11 +103,22 @@ async function startServer(opts) {
     }));
   }
 
+  function remoteInfo() {
+    return {
+      enabled: remote.enabled,
+      connected: Array.from(clients).filter((c) => c.role === 'remote').length,
+      alerts: remote.alerts,
+      pinSet: !!presenterPin,
+      url: publicBase + '/remote',
+    };
+  }
+
   function viewFor(client) {
     if (client.role === 'screen') return screenView(engine, { joinUrl: joinUrl() });
+    if (client.role === 'remote') return remoteView(engine, { enabled: remote.enabled });
     if (client.role === 'play') return playView(engine, client.deviceId);
     return controlView(engine, {
-      joinUrl: joinUrl(), personalUrl, problems, clients: clientList(), mediaErrors,
+      joinUrl: joinUrl(), personalUrl, problems, clients: clientList(), mediaErrors, remote: remoteInfo(),
     });
   }
 
@@ -153,6 +168,17 @@ async function startServer(opts) {
       log.info('Guió recarregat (' + r.show.cues.length + ' cues).');
       return { ok: true };
     }
+    if (cmd.name === 'remote.enable') {
+      remote.enabled = !!cmd.enabled;
+      log.warn('Comandament del presentador ' + (remote.enabled ? 'activat' : 'BLOQUEJAT') + ' pel tècnic.');
+      broadcast();
+      return { ok: true };
+    }
+    if (cmd.name === 'alert.dismiss') {
+      remote.alerts = cmd.id == null ? [] : remote.alerts.filter((a) => a.id !== cmd.id);
+      broadcast();
+      return { ok: true };
+    }
     if (cmd.name === 'session.reset') {
       const archived = engine.reset(fileStamp());
       mediaErrors.length = 0;
@@ -169,6 +195,18 @@ async function startServer(opts) {
       if (!allowed.includes(cmd.name)) return { ok: false, error: 'Ordre no permesa.' };
       // Un mòbil sempre actua en nom propi.
       cmd = Object.assign({}, cmd, { deviceId: client.deviceId });
+    }
+    if (client.role === 'remote') {
+      if (cmd.name === 'remote.alert') {
+        const msg = String(cmd.msg || 'El presentador necessita ajuda').slice(0, 120);
+        remote.alerts.unshift({ id: remote.nextAlertId++, at: engine.now(), msg });
+        remote.alerts.length = Math.min(remote.alerts.length, 10);
+        log.warn('AVÍS DEL PRESENTADOR: ' + msg);
+        broadcast();
+        return { ok: true };
+      }
+      if (!remote.enabled) return { ok: false, error: 'El tècnic ha bloquejat el comandament.' };
+      log.info('Presentador: ' + cmd.name);
     }
     if (cmd.name === 'video.position') {
       engine.setPosition(cmd);
@@ -232,9 +270,12 @@ async function startServer(opts) {
     const url = new URL(req.url, 'http://local');
     const role = url.searchParams.get('role');
     const addr = req.socket.remoteAddress;
-    if (!['screen', 'control', 'play'].includes(role)) return ws.close(4000, 'rol desconegut');
-    // El projector i el panell només des del mateix ordinador, o amb el PIN.
-    if (role !== 'play' && !isLoopback(addr) && !(controlPin && url.searchParams.get('pin') === controlPin)) {
+    if (!['screen', 'control', 'play', 'remote'].includes(role)) return ws.close(4000, 'rol desconegut');
+    // El projector i el panell només des del mateix ordinador, o amb el PIN de control.
+    // El comandament del presentador accepta també el PIN del presentador.
+    const pin = url.searchParams.get('pin');
+    const pinOk = (controlPin && pin === controlPin) || (role === 'remote' && presenterPin && pin === presenterPin);
+    if (role !== 'play' && !isLoopback(addr) && !pinOk) {
       log.warn('Connexió ' + role + ' rebutjada des de ' + addr);
       return ws.close(4003, 'no autoritzat');
     }

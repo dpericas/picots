@@ -24,26 +24,37 @@
 
   const deck = new VideoDeck($('videos'), {
     onEnded: () => {
-      if (state && state.cue) socket.cmd({ name: 'video.ended', cueId: state.cue.id, enterSeq: state.enterSeq });
+      if (!state || !state.cue) return;
+      if (state.cue.type === 'parade') {
+        // Vídeo d'entrada d'un nen acabat: surt la seva targeta (es queda fins al GO).
+        parade.videoEnded();
+        deck.release(400);
+        render();
+        return;
+      }
+      socket.cmd({ name: 'video.ended', cueId: state.cue.id, enterSeq: state.enterSeq });
     },
     onTime: (t) => {
       const now = Date.now();
       if (now - lastPositionSent < 1000 || !state || !state.cue) return;
       lastPositionSent = now;
-      socket.notify({ name: 'video.position', cueId: state.cue.id, enterSeq: state.enterSeq, t });
+      socket.notify({ name: 'video.position', cueId: state.cue.id, enterSeq: state.enterSeq, step: state.step, t });
     },
     onError: (src, msg) => reportMediaError(src, msg),
     onMutedFallback: () => show('sound-hint', true),
     onSwap: () => {
       // Marge perquè el compositor tingui el fotograma a la pantalla abans de treure la capa.
       setTimeout(() => {
-        if (!state || !state.cue || state.cue.type !== 'video') return;
-        visualType = 'video';
+        if (!state || !state.cue) return;
+        if (state.cue.type === 'parade') parade.showVideo();
+        else if (state.cue.type === 'video') visualType = 'video';
+        else return;
         render();
       }, LAYER_HIDE_DELAY_MS);
     },
   });
   window.galaDeck = deck; // per a diagnòstic des de les eines de desenvolupament
+  const parade = new Parade($('parade'), { onError: (src, msg) => reportMediaError(src, msg) });
 
   function show(id, visible) {
     $(id).classList.toggle('hidden', !visible);
@@ -68,6 +79,7 @@
   }
   $('sound-hint').addEventListener('click', () => {
     deck.setMuted(false);
+    parade.setMuted(false);
     music.muted = false;
     show('sound-hint', false);
   });
@@ -135,7 +147,8 @@
       deck.release(1000);
     }
     if (cue.type === 'slides') startSlides(cue);
-    setMusic(cue.type === 'slides' || cue.type === 'hold' ? cue.music : null);
+    if (cue.type === 'parade') parade.enter(cue);
+    setMusic(['slides', 'hold', 'parade'].includes(cue.type) ? cue.music : null);
     if (cue.type === 'hold') $('hold-text').textContent = cue.text || '';
   }
 
@@ -208,15 +221,27 @@
     show('slides', visualType === 'slides');
     show('hold', visualType === 'hold');
     show('vote', visualType === 'vote');
+    show('parade', visualType === 'parade');
+    if (type === 'parade') {
+      const src = parade.setStep(s.step);
+      if (src) {
+        const r = s.resume;
+        const resume = r && r.cueId === cue.id && r.enterSeq === s.enterSeq && r.step === s.step;
+        deck.play(src, { startAt: resume ? r.t : 0, paused: s.paused });
+      } else if (src === null) {
+        deck.release(300); // pas sense vídeo: la capa ja tapa el vídeo anterior
+      }
+    }
     if (type === 'vote' && s.vote) renderVote(cue, s.vote);
 
     deck.preload(s.preload);
 
     // Pausa global: afecta vídeo, música i diapositives.
     // Les capes de negre/espera només tapen la imatge; el so el controla la pausa.
-    if (type === 'video') deck.setPaused(s.paused);
+    if (type === 'video' || (type === 'parade' && parade.busyWithVideo())) deck.setPaused(s.paused);
     if (music.getAttribute('src')) {
-      if (s.paused) music.pause();
+      // La música de fons de l'entrada calla mentre sona el vídeo d'un nen.
+      if (s.paused || (type === 'parade' && parade.busyWithVideo())) music.pause();
       else if (music.paused) safePlay(music);
     }
     show('overlay-hold', s.overlay === 'hold');

@@ -1,7 +1,7 @@
-PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls)
+PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador)
 ================================================
 
-Proves automàtiques: `npm test` (25 tests: motor, guió i servidor). Aquest pla cobreix
+Proves automàtiques: `npm test` (32 tests: motor, guió i servidor). Aquest pla cobreix
 el que els tests no poden verificar (pantalles reals, xarxa, Windows) i, per a cada
 àrea automatitzada, només la prova manual mínima que la confirma en condicions reals.
 
@@ -12,7 +12,7 @@ Purpose: Verificar la lògica del motor (GO/ENRERE/salts, votacions, empats, mà
          protegides, permisos per rol, recàrrega del guió, nova sessió).
 Method:  1. npm install
          2. npm test
-Expected Result: "# pass 25" i "# fail 0".
+Expected Result: "# pass 32" i "# fail 0".
 
 ------------------------------------------------------------------------------
 T02 – Arrencada a Windows amb dues pantalles
@@ -121,7 +121,7 @@ T13 – Pas sense talls entre cues (automàtic, sense so)
 Purpose: Garantir que cap canvi de cue mostra negre: vídeo→vídeo precarregat amb fos,
          salts i ENRERE a vídeos no precarregats, i espera/fotos ↔ vídeo.
 Method:  1. npm run sample-media
-         2. Per a cada escenari (auto, jump, layers), 5 vegades:
+         2. Per a cada escenari (auto, jump, layers, parade), 5 vegades:
             npx electron scripts/check-transitions.js --scenario=<escenari>
 Expected Result: "blackFrames":[] i codi de sortida 0 a totes les execucions.
 
@@ -136,3 +136,51 @@ Method:  1. Posar els vídeos definitius al guió (un parell amb fos: 0.8).
 Expected Result: Cap fotograma negre entre vídeos. Als talls nets, el so del vídeo anterior
          s'atura en començar el nou; als fosos, el so es creua. Als salts, com a molt una
          congelació breu (< 0,5 s) de l'última imatge.
+
+------------------------------------------------------------------------------
+T15 – Entrada triomfal: assaig amb el presentador
+Purpose: Verificar el flux real nen a nen, la sincronia amb el presentador i l'efecte de so.
+Method:  1. Posar les fotos actuals reals (verticals) a show/media/fotos i el camp foto a cada nen.
+         2. Recarregar guió: comprovar que no hi ha avisos de fotos que falten.
+         3. Amb el projector de la sala: GO a cada nom que diu el presentador fins al mosaic.
+         4. A meitat: ENRERE dues vegades i clic al botó d'un nen concret del panell.
+         5. Des de la cue següent (benvinguda), ENRERE.
+Expected Result: Cada GO mostra el nen següent en < 0,2 s, amb confeti i so. ENRERE torna al
+         nen anterior (sense so). El clic salta al nen triat. Des de la cue següent, ENRERE torna
+         al mosaic. Les cares no queden tallades (si no, ajustar la foto).
+
+------------------------------------------------------------------------------
+T16 – Entrada triomfal: classe completa i noms llargs
+Purpose: Comprovar que el mosaic hi cap amb tota la classe i resoldre noms llargs.
+Method:  1. Guió amb tots els nens reals (o 25+ de prova). Saltar al pas «Tots junts».
+         2. Revisar-ho al projector real i a la resolució real.
+Expected Result: Totes les fitxes visibles sense desbordar la pantalla; els noms llargs
+         es retallen amb «…» al mosaic però surten sencers a la targeta individual.
+
+------------------------------------------------------------------------------
+T17 – Vídeos d'entrada dels nens
+Purpose: Verificar el flux vídeo → targeta, la música integrada, el nom sobreimprès, i el
+         marge de temps real amb els 23 vídeos definitius.
+Method:  1. Posar els 23 vídeos a show/media/entrada i el camp video_entrada de cada nen.
+         2. Recarregar guió: cap error de fitxer que falta; al panell, 🎬 a cada nen.
+         3. Assaig complet de l'entrada amb el presentador, cronometrant-lo.
+         4. Durant un vídeo: P (pausa) i P; GO abans que acabi; ENRERE.
+         5. Durant un vídeo, Ctrl+Shift+R (recarregar projector).
+Expected Result: Cada vídeo comença sense negre amb el nom a sota i, en acabar, surt la
+         targeta del nen fins al GO. La música de cada vídeo se sent; la música de fons (si n'hi
+         ha) calla durant els vídeos. Pausa, GO i ENRERE responen al moment. En recarregar,
+         el vídeo continua des d'on era (±2 s). Durada total ≤ 20 min.
+
+------------------------------------------------------------------------------
+T18 – Comandament del presentador a la sala
+Purpose: Verificar el comandament en un mòbil real per WiFi, la coordinació amb el tècnic
+         i els avisos.
+Method:  1. Escanejar el QR «PRESENTADOR» del panell amb el mòbil del presentador; PIN.
+         2. Recórrer l'entrada i una votació només amb el mòbil (GO / ENRERE amb doble toc).
+         3. Tècnic i presentador premen GO exactament alhora 5 vegades.
+         4. El tècnic bloqueja el comandament; el presentador prova GO i després «Avisar el tècnic».
+         5. Bloquejar la pantalla del mòbil 1 minut i tornar-la a obrir.
+Expected Result: (2) Cada GO respon en < 0,5 s i el mòbil vibra; el text del guió i el nen actual
+         són correctes. (3) Cada vegada s'avança només un pas; un dels dos rep «Ja s'ha avançat».
+         (4) GO rebutjat amb «bloquejat»; l'avís surt al panell en franja vermella, sense so.
+         (5) Es reconnecta sol sense tornar a demanar el PIN.

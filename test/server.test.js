@@ -189,3 +189,48 @@ test('Servidor: el projector rep la llista de vídeos a precarregar', async () =
     fs.rmSync(t.root, { recursive: true, force: true });
   }
 });
+
+test('Servidor: comandament del presentador (PIN, ordres permeses, bloqueig i avisos)', async () => {
+  const t = tmpShow();
+  fs.writeFileSync(path.join(t.showDir, 'show.yaml'),
+    SHOW.replace('titol: Test', 'titol: Test\nxarxa: { pin_presentador: "2027" }'));
+  const srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '0.0.0.0', log: quiet });
+  try {
+    const control = await connect(srv.port, 'role=control');
+    const remote = await connect(srv.port, 'role=remote');
+    let s = await remote.until((st) => st.go && st.go.action === 'enter');
+    assert.strictEqual(s.go.label, 'intro');
+    assert.strictEqual((await remote.cmd({ name: 'jump', cueId: 'v1' })).ok, false, 'el presentador no pot saltar');
+    assert.strictEqual((await remote.cmd({ name: 'vote.force', option: 0 })).ok, false);
+    assert.ok((await remote.cmd({ name: 'go', expectNav: s.navSeq })).ok);
+    assert.strictEqual((await remote.cmd({ name: 'go', expectNav: s.navSeq })).ok, false, 'doble GO rebutjat');
+
+    assert.ok((await control.cmd({ name: 'remote.enable', enabled: false })).ok);
+    s = await remote.until((st) => st.enabled === false);
+    const locked = await remote.cmd({ name: 'go', expectNav: s.navSeq });
+    assert.match(locked.error, /bloquejat/);
+    assert.ok((await remote.cmd({ name: 'remote.alert', msg: 'Necessito ajuda' })).ok, 'avisar funciona encara que estigui bloquejat');
+    const cs = await control.until((st) => st.remote.alerts.length === 1);
+    assert.strictEqual(cs.remote.alerts[0].msg, 'Necessito ajuda');
+    assert.strictEqual(cs.remote.connected, 1);
+    assert.ok((await control.cmd({ name: 'alert.dismiss', id: cs.remote.alerts[0].id })).ok);
+    await control.until((st) => st.remote.alerts.length === 0);
+
+    // Des d'una altra màquina (IP de la xarxa local) cal el PIN.
+    const lan = require('../src/server/net').pickLanAddress();
+    if (lan !== '127.0.0.1') {
+      const open = (q) => new Promise((resolve) => {
+        const ws = new WebSocket('ws://' + lan + ':' + srv.port + '/ws?' + q);
+        ws.on('message', () => { ws.close(); resolve('ok'); });
+        ws.on('close', (code) => resolve(code));
+        ws.on('error', () => {});
+      });
+      assert.strictEqual(await open('role=remote&pin=0000'), 4003);
+      assert.strictEqual(await open('role=remote&pin=2027'), 'ok');
+      assert.strictEqual(await open('role=control&pin=2027'), 4003, 'el PIN del presentador no obre el panell');
+    }
+  } finally {
+    await srv.close();
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});
