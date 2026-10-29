@@ -29,6 +29,18 @@ const { renderScript } = require('./script');
 const WEB_DIR = path.join(__dirname, '..', 'web');
 const PAGES = { '/screen': 'screen', '/control': 'control', '/play': 'play', '/remote': 'remote', '/editor': 'editor' };
 const MEDIA_LIST_MAX = 5000;
+// Intents de PIN: després de PIN_MAX_FAILS errors seguits, l'adreça queda bloquejada un temps.
+const PIN_MAX_FAILS = 8;
+const PIN_LOCK_MS = 60000;
+// Fitxers de la carpeta de l'espectacle que no s'han de servir (el guió té els PIN).
+const PRIVATE_SHOW_FILE = /(^|\/)show\.yaml|\.tmp$|\.part\.mp4$|\.bak$/i;
+
+// Només s'accepten noms d'amfitrió que siguin una IP o "localhost" (evita el DNS rebinding).
+function hostAllowed(hostHeader) {
+  if (!hostHeader) return true;
+  const host = hostHeader.replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+  return host === 'localhost' || /^[\d.]+$/.test(host) || host.includes(':');
+}
 const SHOW_BACKUPS = 20;
 const ROLE_COMMANDS = {
   play: ['claim', 'ballot', 'release', 'answer', 'tap', 'wall.post'],
@@ -100,8 +112,28 @@ async function startServer(opts) {
 
   const network = loaded.show.network;
   const port = opts.port != null ? opts.port : network.port;
-  const controlPin = opts.controlPin || network.controlPin;
-  const presenterPin = opts.presenterPin || network.presenterPin;
+  // Els PIN es llegeixen del guió actual: si es canvien a l'editor, valen al moment.
+  const controlPin = () => opts.controlPin || show.network.controlPin;
+  const presenterPin = () => opts.presenterPin || show.network.presenterPin;
+  const pinFailures = new Map(); // adreça -> { count, until }
+  function pinLocked(addr) {
+    const f = pinFailures.get(addr);
+    return !!f && f.until > Date.now();
+  }
+  function pinResult(addr, ok) {
+    if (ok) {
+      pinFailures.delete(addr);
+      return;
+    }
+    const f = pinFailures.get(addr) || { count: 0, until: 0 };
+    f.count += 1;
+    if (f.count >= PIN_MAX_FAILS) {
+      f.until = Date.now() + PIN_LOCK_MS;
+      f.count = 0;
+      log.warn('Massa intents de PIN des de ' + addr + ': bloquejat ' + PIN_LOCK_MS / 1000 + ' s.');
+    }
+    pinFailures.set(addr, f);
+  }
   // Comandament del presentador: el tècnic el pot bloquejar; els avisos li arriben al panell.
   const remote = { enabled: true, alerts: [], nextAlertId: 1 };
   const mediaErrors = [];
@@ -122,7 +154,7 @@ async function startServer(opts) {
       enabled: remote.enabled,
       connected: Array.from(clients).filter((c) => c.role === 'remote').length,
       alerts: remote.alerts,
-      pinSet: !!presenterPin,
+      pinSet: !!presenterPin(),
       url: publicBase + '/remote',
     };
   }
@@ -160,8 +192,8 @@ async function startServer(opts) {
       // El que queda: el que falta de la cue actual i el camí per defecte des d'aquí.
       const inCue = last ? (now - last.t) / 1000 : 0;
       const rest = linearPath(show, null, s.cueId).ids.slice(1);
-      remaining = Math.max(0, estimates.perCue[s.cueId].seconds - inCue) +
-        rest.reduce((a, id) => a + estimates.perCue[id].seconds, 0);
+      const sec = (id) => (estimates.perCue[id] ? estimates.perCue[id].seconds : 0);
+      remaining = Math.max(0, sec(s.cueId) - inCue) + rest.reduce((a, id) => a + sec(id), 0);
     } else if (s.ended) {
       remaining = 0;
     }
@@ -196,7 +228,14 @@ async function startServer(opts) {
     broadcastPending = true;
     setImmediate(() => {
       broadcastPending = false;
-      for (const c of clients) send(c, { type: 'state', state: viewFor(c) });
+      for (const c of clients) {
+        // Un error en la vista d'un client no ha de deixar sense estat els altres.
+        try {
+          send(c, { type: 'state', state: viewFor(c) });
+        } catch (err) {
+          log.error('No s\'ha pogut preparar l\'estat per a ' + c.role + ' #' + c.id + ': ' + err.stack);
+        }
+      }
     });
   }
 
@@ -214,6 +253,7 @@ async function startServer(opts) {
     positionFile = path.join(dataDir, files.position);
     journal = new FileJournal(path.join(dataDir, files.journal), log);
     const e = new Engine({ show, journal, keyFor, position: readJson(positionFile) });
+    e.replayWarnings.forEach((msg) => log.warn(msg));
     e.on('warning', (msg) => log.warn(msg));
     e.on('change', (ev) => {
       if (ev && !QUIET_EVENTS.includes(ev.type)) log.info('Event ' + ev.seq + ': ' + ev.type + summarize(ev));
@@ -228,11 +268,32 @@ async function startServer(opts) {
   engine = openEngine(mode);
 
   // Canvia entre gala i assaig. Els mòbils que ja tenien nom el conserven.
+  function savePositionNow() {
+    const p = engine.position;
+    try {
+      if (p) fs.writeFileSync(positionFile, JSON.stringify(p));
+      else fs.rmSync(positionFile, { force: true });
+    } catch (err) {
+      log.warn('No es pot desar la posició: ' + err.message);
+    }
+  }
+
   function switchMode(target, fresh) {
     const claims = Object.assign({}, engine.state.claims);
+    const previous = mode;
+    savePositionNow(); // la posició del vídeo del mode que es deixa, al dia
     engine.dispose();
     engine.removeAllListeners();
     journal.close();
+    try {
+      engine = openEngine(target);
+    } catch (err) {
+      // No s'ha pogut obrir el diari del mode nou: es torna al d'abans.
+      log.error('No es pot canviar al mode ' + target + ': ' + err.message);
+      engine = openEngine(previous);
+      broadcast();
+      throw err;
+    }
     mode = target;
     try {
       if (mode === 'gala') fs.rmSync(modeFile, { force: true });
@@ -240,7 +301,6 @@ async function startServer(opts) {
     } catch (err) {
       log.warn('No es pot desar el mode: ' + err.message);
     }
-    engine = openEngine(mode);
     if (fresh) {
       const archived = engine.reset(fileStamp());
       if (archived) log.info('Assaig anterior arxivat: ' + archived);
@@ -248,7 +308,7 @@ async function startServer(opts) {
     Object.keys(claims).forEach((pid) => {
       if (!engine.state.claims[pid]) engine.dispatch({ name: 'claim', deviceId: claims[pid], participantId: pid, key: keyFor(pid) });
     });
-    lastSavedPosition = null;
+    lastSavedPosition = undefined; // força desar (o esborrar) la posició del mode nou
     mediaErrors.length = 0;
     log.warn(mode === 'assaig' ? 'MODE ASSAIG' + (fresh ? ' (de zero)' : '') : 'Tornada al mode GALA');
     broadcast();
@@ -332,19 +392,27 @@ async function startServer(opts) {
       return { ok: true, raw, mtime: fs.statSync(showFile).mtimeMs, media: mediaList(), problems };
     }
     if (cmd.name === 'show.validate') {
-      const v = validateRaw(cmd.raw || {});
+      if (!isPlainObject(cmd.raw)) return { ok: false, error: 'Guió no vàlid.' };
+      const v = validateRaw(cmd.raw);
       return { ok: true, valid: v.ok, problems: v.problems };
     }
     if (cmd.name === 'show.save') {
       if (cmd.mtime != null && fs.statSync(showFile).mtimeMs !== cmd.mtime && !cmd.force) {
         return { ok: false, conflict: true, error: 'El show.yaml ha canviat des que l\'has obert (algú l\'ha editat).' };
       }
-      const v = validateRaw(cmd.raw || {});
+      if (!isPlainObject(cmd.raw)) return { ok: false, error: 'Guió no vàlid.' };
+      const v = validateRaw(cmd.raw);
       if (!v.ok) return { ok: false, error: 'El guió té errors: corregeix-los abans de desar.', problems: v.problems };
       backupShow();
       const tmp = showFile + '.tmp';
       fs.writeFileSync(tmp, v.text);
-      fs.renameSync(tmp, showFile);
+      try {
+        fs.renameSync(tmp, showFile);
+      } catch (err) {
+        // A Windows falla si un altre programa té el fitxer obert.
+        fs.rmSync(tmp, { force: true });
+        return { ok: false, error: 'No es pot escriure el show.yaml (el té obert un altre programa?): ' + err.message };
+      }
       const r = handleServerCommand({ name: 'show.reload' });
       log.info('Guió desat des de l\'editor' + (r.ok ? ' i aplicat.' : ': ' + r.error));
       return Object.assign({}, r, { mtime: fs.statSync(showFile).mtimeMs, problems: r.ok ? problems : r.problems });
@@ -385,7 +453,7 @@ async function startServer(opts) {
       return {
         ok: true,
         report: runPreflight({
-          show, problems, showDir, dataDir, engine, mode, joinUrl: joinUrl(), presenterPin,
+          show, problems, showDir, dataDir, engine, mode, joinUrl: joinUrl(), presenterPin: presenterPin(),
           fixedHost: !!(opts.publicHost || show.network.publicHost),
           clients: Array.from(clients), system: opts.systemInfo ? opts.systemInfo() : null,
         }),
@@ -466,12 +534,28 @@ async function startServer(opts) {
       return file ? serveFile(req, res, file) : sendError(res, 404);
     }
     if (p.startsWith('/show/')) {
-      const file = safeResolve(showDir, p.slice('/show/'.length));
+      const rel = p.slice('/show/'.length);
+      let decoded = '';
+      try {
+        decoded = decodeURIComponent(rel);
+      } catch (err) {
+        return sendError(res, 404);
+      }
+      if (PRIVATE_SHOW_FILE.test(decoded.replace(/\\/g, '/'))) return sendError(res, 404);
+      const file = safeResolve(showDir, rel);
       return file ? serveFile(req, res, file, { cache: true }) : sendError(res, 404);
     }
     // Pàgines d'impressió: com el panell, des d'aquest ordinador o amb el PIN de control.
-    const controlAllowed = () => isLoopback(req.socket.remoteAddress) ||
-      !!(controlPin && url.searchParams.get('pin') === controlPin);
+    const controlAllowed = () => {
+      if (!hostAllowed(req.headers.host)) return false;
+      if (isLoopback(req.socket.remoteAddress)) return true;
+      const addr = req.socket.remoteAddress;
+      const given = url.searchParams.get('pin');
+      if (!given || pinLocked(addr)) return false;
+      const ok = !!controlPin() && given === controlPin();
+      pinResult(addr, ok);
+      return ok;
+    };
     if (p === '/guio') {
       if (!controlAllowed()) return sendError(res, 403);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
@@ -535,7 +619,27 @@ async function startServer(opts) {
     // El projector i el panell només des del mateix ordinador, o amb el PIN de control.
     // El comandament del presentador accepta també el PIN del presentador.
     const pin = url.searchParams.get('pin');
-    const pinOk = (controlPin && pin === controlPin) || (role === 'remote' && presenterPin && pin === presenterPin);
+    // Només pàgines servides per aquest mateix servidor (una web qualsevol no pot fer de panell).
+    const origin = req.headers.origin;
+    let originOk = !origin;
+    try {
+      originOk = originOk || new URL(origin).host === req.headers.host;
+    } catch (err) {
+      originOk = false;
+    }
+    if (!originOk || !hostAllowed(req.headers.host)) {
+      log.warn('Connexió ' + role + ' rebutjada: origen ' + origin);
+      return ws.close(4003, 'origen no autoritzat');
+    }
+    let pinOk = false;
+    if (role !== 'play' && !isLoopback(addr)) {
+      if (pinLocked(addr)) {
+        log.warn('Connexió ' + role + ' rebutjada (massa intents) des de ' + addr);
+        return ws.close(4003, 'massa intents');
+      }
+      pinOk = !!pin && ((!!controlPin() && pin === controlPin()) || (role === 'remote' && !!presenterPin() && pin === presenterPin()));
+      pinResult(addr, pinOk);
+    }
     if (role !== 'play' && !isLoopback(addr) && !pinOk) {
       log.warn('Connexió ' + role + ' rebutjada des de ' + addr);
       return ws.close(4003, 'no autoritzat');
@@ -603,7 +707,10 @@ async function startServer(opts) {
     for (const c of clients) c.ws.terminate();
     wss.close();
     journal.close();
-    await new Promise((resolve) => httpServer.close(resolve));
+    // Les peticions de vídeo en curs (Range) mantenen connexions obertes: es tanquen totes.
+    const closed = new Promise((resolve) => httpServer.close(resolve));
+    if (typeof httpServer.closeAllConnections === 'function') httpServer.closeAllConnections();
+    await closed;
   }
 
   return {
@@ -616,6 +723,10 @@ async function startServer(opts) {
     dataDir,
     close,
   };
+}
+
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
 function summarize(ev) {

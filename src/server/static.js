@@ -3,6 +3,7 @@
 // (imprescindible perquè el reproductor de vídeo pugui saltar endavant/enrere).
 
 const fs = require('fs');
+const { pipeline } = require('stream');
 const path = require('path');
 
 const TYPES = {
@@ -77,13 +78,19 @@ function serveFile(req, res, file, opts) {
       headers['Content-Length'] = end - start + 1;
       res.writeHead(206, headers);
       if (req.method === 'HEAD') return res.end();
-      return fs.createReadStream(file, { start, end }).pipe(res);
+      return stream(fs.createReadStream(file, { start, end }), res);
     }
     headers['Content-Length'] = st.size;
     res.writeHead(200, headers);
     if (req.method === 'HEAD') return res.end();
-    fs.createReadStream(file).pipe(res);
+    stream(fs.createReadStream(file), res);
   });
+}
+
+// pipeline tanca el fitxer també quan el client talla la petició (el projector ho fa
+// a cada salt de vídeo); amb pipe() el descriptor quedaria obert.
+function stream(source, res) {
+  pipeline(source, res, () => {});
 }
 
 module.exports = { safeResolve, serveFile, sendError };

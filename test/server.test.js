@@ -469,3 +469,49 @@ test('Servidor: editor del guió (llegir, revisar, desar amb còpia i conflicte)
     fs.rmSync(t.root, { recursive: true, force: true });
   }
 });
+
+test('Servidor (revisió): show.yaml privat, guió sense la cue actual, origen i intents de PIN', async () => {
+  const t = tmpShow();
+  fs.writeFileSync(path.join(t.showDir, 'show.yaml'), SHOW.replace('titol: Test', 'titol: Test\nxarxa: { pin_control: "9999" }'));
+  const srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet });
+  try {
+    assert.strictEqual((await get(srv.port, '/show/show.yaml')).status, 404);
+    assert.strictEqual((await get(srv.port, '/show/show.yaml.bak')).status, 404);
+    assert.strictEqual((await get(srv.port, '/show/media/v.mp4')).status, 200);
+    assert.strictEqual((await get(srv.port, '/resum', { Host: 'evil.example.com:80' })).status, 403, 'DNS rebinding');
+
+    const control = await connect(srv.port, 'role=control');
+    const screen = await connect(srv.port, 'role=screen');
+    assert.ok((await control.cmd({ name: 'jump', cueId: 'v1' })).ok);
+    // Guió nou sense la cue actual: tothom continua rebent estat.
+    fs.writeFileSync(path.join(t.showDir, 'show.yaml'), 'titol: Nou\ncues:\n  - { id: altra, tipus: espera }\n');
+    assert.ok((await control.cmd({ name: 'show.reload' })).ok);
+    await control.until((s) => s.title === 'Nou');
+    await screen.until((s) => s.title === 'Nou');
+
+    // Una pàgina d'un altre lloc no es pot connectar com a panell.
+    const foreign = await new Promise((resolve) => {
+      const ws = new WebSocket('ws://127.0.0.1:' + srv.port + '/ws?role=control', { headers: { Origin: 'http://evil.example.com' } });
+      ws.on('close', (code) => resolve(code));
+      ws.on('error', () => {});
+    });
+    assert.strictEqual(foreign, 4003);
+  } finally {
+    await srv.close();
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});
+
+test('Servidor (revisió): close() no es penja amb una descàrrega de vídeo a mitges', async () => {
+  const t = tmpShow();
+  fs.writeFileSync(path.join(t.showDir, 'media', 'v.mp4'), Buffer.alloc(8 * 1024 * 1024));
+  const srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet });
+  const req = http.get({ host: '127.0.0.1', port: srv.port, path: '/show/media/v.mp4', headers: { Range: 'bytes=0-' } }, (res) => {
+    res.pause(); // el client no llegeix: la connexió queda oberta
+  });
+  req.on('error', () => {});
+  await new Promise((r) => setTimeout(r, 100));
+  const done = await Promise.race([srv.close().then(() => 'tancat'), new Promise((r) => setTimeout(() => r('penjat'), 3000))]);
+  assert.strictEqual(done, 'tancat');
+  fs.rmSync(t.root, { recursive: true, force: true });
+});

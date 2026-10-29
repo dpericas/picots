@@ -115,6 +115,9 @@ function applyEvent(state, ev) {
     case 'quiz.reset':
       if (s.quiz[ev.cueId]) delete s.quiz[ev.cueId][ev.q];
       break;
+    case 'quiz.clear':
+      delete s.quiz[ev.cueId];
+      break;
     case 'challenge.open':
       s.challenges[ev.cueId] = {
         status: 'open', openedSeq: ev.seq, endsAt: ev.endsAt, taps: {}, result: null, reason: null,
@@ -137,6 +140,7 @@ function applyEvent(state, ev) {
     }
     case 'challenge.force': {
       const c = s.challenges[ev.cueId] || { taps: {} };
+      Object.assign(c.taps, ev.taps || {}); // tocs encara no desats en el moment de forçar
       c.status = 'closed';
       c.result = ev.result;
       c.reason = ev.source;

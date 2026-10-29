@@ -102,18 +102,20 @@
   $('btn-black').addEventListener('click', () => overlay('black'));
   $('btn-hold').addEventListener('click', () => overlay('hold'));
   $('btn-normal').addEventListener('click', () => send({ name: 'overlay', mode: 'none' }));
-  $('btn-vote-open').addEventListener('click', () => send({ name: 'vote.open' }));
-  $('btn-vote-close').addEventListener('click', () => send({ name: 'vote.close' }));
-  $('btn-vote-extend').addEventListener('click', () => send({ name: 'vote.extend', seconds: 15 }));
-  armed($('btn-vote-reset'), () => send({ name: 'vote.reset' }));
-  $('btn-quiz-extend').addEventListener('click', () => send({ name: 'quiz.extend', seconds: 15 }));
-  armed($('btn-quiz-reset'), () => send({ name: 'quiz.reset' }));
-  $('btn-ch-open').addEventListener('click', () => send({ name: 'challenge.open' }));
-  $('btn-ch-close').addEventListener('click', () => send({ name: 'challenge.close' }));
-  $('btn-ch-extend').addEventListener('click', () => send({ name: 'challenge.extend', seconds: 10 }));
-  $('btn-ch-success').addEventListener('click', () => send({ name: 'challenge.force', result: 'success', source: 'manual' }));
-  $('btn-ch-fail').addEventListener('click', () => send({ name: 'challenge.force', result: 'fail', source: 'manual' }));
-  armed($('btn-ch-reset'), () => send({ name: 'challenge.reset' }));
+  // Ordres lligades a la cue actual: si mentrestant s'ha canviat de cue, el servidor les rebutja.
+  const onCue = (cmd) => send(Object.assign({ expectCue: state && state.state.cueId }, cmd));
+  $('btn-vote-open').addEventListener('click', () => onCue({ name: 'vote.open' }));
+  $('btn-vote-close').addEventListener('click', () => onCue({ name: 'vote.close' }));
+  $('btn-vote-extend').addEventListener('click', () => onCue({ name: 'vote.extend', seconds: 15 }));
+  armed($('btn-vote-reset'), () => onCue({ name: 'vote.reset' }));
+  $('btn-quiz-extend').addEventListener('click', () => onCue({ name: 'quiz.extend', seconds: 15 }));
+  armed($('btn-quiz-reset'), () => onCue({ name: 'quiz.reset' }));
+  $('btn-ch-open').addEventListener('click', () => onCue({ name: 'challenge.open' }));
+  $('btn-ch-close').addEventListener('click', () => onCue({ name: 'challenge.close' }));
+  $('btn-ch-extend').addEventListener('click', () => onCue({ name: 'challenge.extend', seconds: 10 }));
+  $('btn-ch-success').addEventListener('click', () => onCue({ name: 'challenge.force', result: 'success', source: 'manual' }));
+  $('btn-ch-fail').addEventListener('click', () => onCue({ name: 'challenge.force', result: 'fail', source: 'manual' }));
+  armed($('btn-ch-reset'), () => onCue({ name: 'challenge.reset' }));
   $('btn-wall-approve-all').addEventListener('click', () => {
     (state.wall ? state.wall.posts : []).filter((m) => m.status === 'pending')
       .forEach((m) => send({ name: 'wall.moderate', id: m.id, status: 'approved' }));
@@ -183,6 +185,8 @@
 
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea, select') || e.repeat) return;
+    // Sense dreceres amb Ctrl/Alt (Ctrl+P no ha de posar pausa) ni amb un diàleg obert.
+    if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open]')) return;
     if (e.code === 'Space') { e.preventDefault(); go(); }
     else if (e.code === 'ArrowLeft' && e.shiftKey) { e.preventDefault(); back(); }
     else if (e.code === 'KeyP') pause();
@@ -198,7 +202,11 @@
   }
 
   // --- Pintat ---
+  // Les llistes es construeixen un cop i després només s'actualitzen: si es refessin a cada
+  // estat (durant un repte arriben ~7 per segon), es perdrien clics del tècnic.
   let routeStart = {};
+  let rundownKey = null;
+  let rundownItems = {};
   function renderRundown() {
     const s = state.state;
     // Minut en què comença cada cue del camí per defecte.
@@ -207,44 +215,55 @@
       let acc = 0;
       state.timing.route.forEach((id) => {
         routeStart[id] = acc;
-        acc += state.timing.perCue[id].seconds;
+        acc += state.timing.perCue[id] ? state.timing.perCue[id].seconds : 0;
       });
     }
     const goTarget = state.go.action === 'enter' ? state.go.cueId : null;
     const visited = new Set(s.history.concat(s.cueId ? [s.cueId] : []));
     const list = $('rundown');
-    list.textContent = '';
-    state.cues.forEach((c, i) => {
+    const key = JSON.stringify(state.cues.map((c) => [c.id, c.title, c.type, c.notes, c.options, c.outcomes]));
+    if (key !== rundownKey) {
+      rundownKey = key;
+      rundownItems = {};
+      list.textContent = '';
+      state.cues.forEach((c, i) => {
+        let branchText = null;
+        if (c.options) branchText = c.options.map((o, j) => String.fromCharCode(65 + j) + '→' + o.goto).join('  ');
+        if (c.outcomes) branchText = '✔→' + c.outcomes.success + '  ✘→' + (c.outcomes.fail || 'fi');
+        const branches = branchText ? el('span', { class: 'branches', text: branchText }) : null;
+        const dur = el('span', { class: 'dur' });
+        const li = el('li', { title: c.notes || '' }, [
+          el('span', { class: 'type', text: (i + 1) + ' ' + (TYPE_LABEL[c.type] || c.type) }),
+          el('span', {}, [cueLabel(c), branches]),
+          dur,
+        ]);
+        li.addEventListener('click', () => { selected = c.id; renderRundown(); });
+        li.addEventListener('dblclick', () => send({ name: 'jump', cueId: c.id }));
+        rundownItems[c.id] = { li, dur };
+        list.append(li);
+      });
+    }
+    state.cues.forEach((c) => {
+      const item = rundownItems[c.id];
       const classes = [];
       if (c.id === s.cueId) classes.push('current');
       if (c.id === goTarget) classes.push('next');
       if (visited.has(c.id)) classes.push('visited');
       if (c.id === selected) classes.push('selected');
-      let branchText = null;
-      if (c.options) branchText = c.options.map((o, j) => String.fromCharCode(65 + j) + '→' + o.goto).join('  ');
-      if (c.outcomes) branchText = '✔→' + c.outcomes.success + '  ✘→' + (c.outcomes.fail || 'fi');
-      const branches = branchText ? el('span', { class: 'branches', text: branchText }) : null;
+      item.li.className = classes.join(' ');
       const tm = state.timing;
-      let dur = null;
+      item.dur.textContent = '';
       if (tm && tm.perCue[c.id]) {
         const e = tm.perCue[c.id];
         const real = tm.actual[c.id];
         const startAt = routeStart[c.id];
-        dur = el('span', { class: 'dur', title: (startAt != null ? 'Comença cap al minut ' + clock(startAt) + ' (camí per defecte). ' : '') +
-          (e.unknown ? 'No es pot llegir la durada del vídeo.' : e.manual ? 'durada_estimada del guió.' : e.approx ? 'Estimació: depèn del ritme de la sala.' : 'Durada del vídeo o de les fotos.') }, [
-          e.unknown ? '?' : (e.approx ? '≈' : '') + clock(e.seconds),
-          real != null ? el('span', { class: real > e.seconds * 1.25 + 15 ? 'over' : 'real', text: ' · ' + clock(real) }) : null,
-          startAt != null ? el('div', { text: '+' + clock(startAt) }) : null,
-        ]);
+        item.dur.title = (startAt != null ? 'Comença cap al minut ' + clock(startAt) + ' (camí per defecte). ' : '') +
+          (e.unknown ? 'No es pot llegir la durada del vídeo.' : e.manual ? 'durada_estimada del guió.'
+            : e.approx ? 'Estimació: depèn del ritme de la sala.' : 'Durada del vídeo o de les fotos.');
+        item.dur.append(e.unknown ? '?' : (e.approx ? '≈' : '') + clock(e.seconds));
+        if (real != null) item.dur.append(el('span', { class: real > e.seconds * 1.25 + 15 ? 'over' : 'real', text: ' · ' + clock(real) }));
+        if (startAt != null) item.dur.append(el('div', { text: '+' + clock(startAt) }));
       }
-      const li = el('li', { class: classes.join(' '), title: c.notes || '' }, [
-        el('span', { class: 'type', text: (i + 1) + ' ' + (TYPE_LABEL[c.type] || c.type) }),
-        el('span', {}, [cueLabel(c), branches]),
-        dur,
-      ]);
-      li.addEventListener('click', () => { selected = c.id; renderRundown(); });
-      li.addEventListener('dblclick', () => send({ name: 'jump', cueId: c.id }));
-      list.append(li);
     });
   }
 
@@ -288,18 +307,26 @@
     $('vote-status').textContent = '– ' + statusText + (v.reason ? ' (' + reasonText(v.reason) + ')' : '');
     $('vote-question').textContent = cue.title || cue.id;
     const table = $('vote-table');
-    table.textContent = '';
-    cue.options.forEach((o, i) => {
-      const forceBtn = el('button', { text: 'Forçar', title: 'Decidir aquest resultat' });
-      forceBtn.addEventListener('click', () => send({ name: 'vote.force', option: i, source: 'operator' }));
-      const handBtn = el('button', { text: 'Mà alçada', title: 'Resultat del vot a mà alçada' });
-      handBtn.addEventListener('click', () => send({ name: 'vote.force', option: i, source: 'manual' }));
-      table.append(el('tr', { class: v.result === i && v.status === 'closed' ? 'winner' : '' }, [
-        el('td', { text: String.fromCharCode(65 + i) + '. ' + o.text }),
-        el('td', { class: 'hint', text: '→ ' + o.goto }),
-        el('td', { class: 'n', text: String(v.counts[i] || 0) }),
-        el('td', {}, [forceBtn, ' ', handBtn]),
-      ]));
+    const key = JSON.stringify([cue.id, cue.options]);
+    if (table.dataset.key !== key) {
+      table.dataset.key = key;
+      table.textContent = '';
+      cue.options.forEach((o, i) => {
+        const forceBtn = el('button', { text: 'Forçar', title: 'Decidir aquest resultat' });
+        forceBtn.addEventListener('click', () => send({ name: 'vote.force', option: i, source: 'operator', expectCue: cue.id }));
+        const handBtn = el('button', { text: 'Mà alçada', title: 'Resultat del vot a mà alçada' });
+        handBtn.addEventListener('click', () => send({ name: 'vote.force', option: i, source: 'manual', expectCue: cue.id }));
+        table.append(el('tr', {}, [
+          el('td', { text: String.fromCharCode(65 + i) + '. ' + o.text }),
+          el('td', { class: 'hint', text: '→ ' + o.goto }),
+          el('td', { class: 'n' }),
+          el('td', {}, [forceBtn, ' ', handBtn]),
+        ]));
+      });
+    }
+    Array.from(table.children).forEach((tr, i) => {
+      tr.className = v.result === i && v.status === 'closed' ? 'winner' : '';
+      tr.querySelector('.n').textContent = String(v.counts[i] || 0);
     });
     $('btn-vote-open').disabled = v.status !== 'pending';
     $('btn-vote-close').disabled = v.status !== 'open';
@@ -319,17 +346,22 @@
     const current = state.state.step;
     $('steps-pos').textContent = '– ' + current + ' / ' + (steps.length - 1);
     const box = $('steps');
-    box.textContent = '';
-    steps.forEach((label, i) => {
-      const cls = i === current ? 'current' : i === current + 1 ? 'next' : i < current ? 'done' : '';
-      const hasVideo = cue.stepVideos && cue.stepVideos[i];
-      const b = el('button', {
-        class: cls,
-        text: (i > 0 && i < steps.length - 1 ? i + '. ' : '') + label + (hasVideo ? ' 🎬' : ''),
-        title: hasVideo ? 'Amb vídeo d\'entrada' : null,
+    const key = JSON.stringify([cue.id, steps, cue.stepVideos]);
+    if (box.dataset.key !== key) {
+      box.dataset.key = key;
+      box.textContent = '';
+      steps.forEach((label, i) => {
+        const hasVideo = cue.stepVideos && cue.stepVideos[i];
+        const b = el('button', {
+          text: (i > 0 && i < steps.length - 1 ? i + '. ' : '') + label + (hasVideo ? ' 🎬' : ''),
+          title: hasVideo ? 'Amb vídeo d\'entrada' : null,
+        });
+        b.addEventListener('click', () => send({ name: 'step', step: i, expectCue: cue.id }));
+        box.append(b);
       });
-      b.addEventListener('click', () => send({ name: 'step', step: i }));
-      box.append(b);
+    }
+    Array.from(box.children).forEach((b, i) => {
+      b.className = i === current ? 'current' : i === current + 1 ? 'next' : i < current ? 'done' : '';
     });
   }
 
@@ -427,24 +459,30 @@
     if ($('join-qr').getAttribute('src') !== qrSrc) $('join-qr').src = qrSrc;
     const online = new Set(state.clients.filter((c) => c.role === 'play').map((c) => c.deviceId));
     const list = $('participants');
-    list.textContent = '';
+    const key = JSON.stringify(state.participants.map((p) => [p.id, p.name, p.personalUrl]));
+    if (list.dataset.key !== key) {
+      list.dataset.key = key;
+      list.textContent = '';
+      state.participants.forEach((p) => {
+        const qrBtn = el('button', { text: 'QR', title: 'QR personal' });
+        qrBtn.addEventListener('click', () => showQr(p.personalUrl, p.name));
+        const releaseBtn = el('button', { class: 'release', text: 'Alliberar', title: 'Deslliga el mòbil d\'aquest nen' });
+        releaseBtn.addEventListener('click', () => send({ name: 'release', participantId: p.id }));
+        list.append(el('li', {}, [el('span', { class: 'dot' }), el('span', { class: 'name' }), qrBtn, releaseBtn]));
+      });
+    }
     let connected = 0;
-    state.participants.forEach((p) => {
+    state.participants.forEach((p, i) => {
+      const li = list.children[i];
       const isOnline = p.deviceId && online.has(p.deviceId);
       if (isOnline) connected += 1;
-      const qrBtn = el('button', { text: 'QR', title: 'QR personal' });
-      qrBtn.addEventListener('click', () => showQr(p.personalUrl, p.name));
-      const releaseBtn = el('button', { text: 'Alliberar', title: 'Deslliga el mòbil d\'aquest nen' });
-      releaseBtn.disabled = !p.deviceId;
-      releaseBtn.addEventListener('click', () => send({ name: 'release', participantId: p.id }));
       const voted = (state.vote && state.vote.voters.some((x) => x.id === p.id)) ||
         (state.quiz && state.quiz.answeredBy && state.quiz.answeredBy.some((x) => x.id === p.id));
-      list.append(el('li', {}, [
-        el('span', { class: 'dot' + (isOnline ? ' online' : p.deviceId ? ' claimed' : ''),
-          title: isOnline ? 'connectat' : p.deviceId ? 'assignat però desconnectat' : 'sense mòbil' }),
-        el('span', { class: 'name', text: p.name + (voted ? ' ✔' : '') }),
-        qrBtn, releaseBtn,
-      ]));
+      const dot = li.querySelector('.dot');
+      dot.className = 'dot' + (isOnline ? ' online' : p.deviceId ? ' claimed' : '');
+      dot.title = isOnline ? 'connectat' : p.deviceId ? 'assignat però desconnectat' : 'sense mòbil';
+      li.querySelector('.name').textContent = p.name + (voted ? ' ✔' : '');
+      li.querySelector('.release').disabled = !p.deviceId;
     });
     $('phones-count').textContent = connected + '/' + state.participants.length;
     const roles = {};

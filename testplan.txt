@@ -1,7 +1,7 @@
-PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador; cicle 6: qüestionari, repte, mencions i mur; cicle 7: eines de preparació, assaig i pantalles; cicle 8: targetes QR, vídeo de reserva i privacitat; cicle 9: durada, editor del guió, guió del presentador i rètols)
+PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador; cicle 6: qüestionari, repte, mencions i mur; cicle 7: eines de preparació, assaig i pantalles; cicle 8: targetes QR, vídeo de reserva i privacitat; cicle 9: durada, editor del guió, guió del presentador i rètols; cicle 10: vídeos del conte, PDF dels documents i correccions de la revisió)
 ================================================
 
-Proves automàtiques: `npm test` (65 tests: motor, guió, servidor, cues interactives, generador
+Proves automàtiques: `npm test` (76 tests: motor, guió, servidor, cues interactives, generador
 de vídeos, vídeo de reserva, assaig, comprovació prèvia, diplomes, targetes, resum i esborrat). Aquest pla cobreix
 el que els tests no poden verificar (pantalles reals, xarxa, Windows) i, per a cada
 àrea automatitzada, només la prova manual mínima que la confirma en condicions reals.
@@ -359,3 +359,31 @@ Method:  1. Menú Gala › Exportar guió del presentador a PDF; imprimir-lo.
 Expected Result: (1) Totes les cues en ordre amb minut previst, text a dir, branques i
          respostes; les branques no previstes en gris. (2) El rètol entra a baix a l'esquerra en
          començar el vídeo i desapareix als 7 s; no surt a les altres cues.
+
+------------------------------------------------------------------------------
+T34 – Vídeos del conte amb il·lustracions i narració
+Purpose: Verificar que es pot produir un capítol sense saber editar vídeo.
+Method:  1. fonts-conte/cap1/: 6 il·lustracions, 6 veus gravades amb el mòbil (m4a), una música
+            i un guio.yaml amb una targeta de títol, les 6 escenes amb veu i subtítol.
+         2. fonts-conte/altres/: 4 vídeos curts de professors (un en vertical) amb rotol.
+         3. npm run story-video; obrir els MP4 i passar-los al projector.
+Expected Result: (1) Cada escena dura el que dura la seva veu; el subtítol es llegeix; la música
+         baixa quan parla el narrador i torna a pujar. (2) Cada vídeo amb el seu rètol els primers
+         7 s; el vertical centrat amb franges; volum semblant entre tots. (3) Sense talls ni negres
+         llargs entre escenes; el títol es veu bé a 1080p.
+
+------------------------------------------------------------------------------
+T35 – Robustesa davant errors (correccions de la revisió)
+Purpose: Verificar en real els casos límit corregits.
+Method:  1. Treure l'alimentació del portàtil durant una votació (o matar el procés), tornar a
+            obrir, fer GO dues vegades i tornar a tancar i obrir.
+         2. Des d'un mòbil, obrir http://<ip>:8080/show/show.yaml.
+         3. Esborrar al guió la cue que s'està fent i desar-lo des de l'editor.
+         4. Durant un vídeo d'entrada, canviar-ne el fitxer per un de trencat i fer GO fins a ell.
+         5. Durant un repte, posar un mòbil en mode avió 3 s i tocar; tornar a activar la WiFi.
+         6. Menú Gala › Esborrar dades… amb el projector reproduint un vídeo.
+Expected Result: (1) Es continua on era i els GO després de la recuperació hi són en reobrir.
+         (2) Error 404 (els PIN no es poden llegir). (3) El panell, el projector i els mòbils
+         segueixen funcionant. (4) Surt la targeta del nen i el panell avisa de l'error.
+         (5) Els tocs fets sense connexió es compten en tornar. (6) L'esborrat es fa i l'app es
+         tanca; la carpeta de dades i la memòria cau ja no hi són.

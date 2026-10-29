@@ -14,6 +14,22 @@ const WALL_MAX_TEXT = 100;
 const WALL_MAX_DRAWING = 80000;
 const WALL_COOLDOWN_MS = 3000;
 const DRAWING_RE = /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/;
+const MAX_EXTEND_SECONDS = 600;
+const CUE_BOUND = [
+  'step', 'vote.open', 'vote.close', 'vote.extend', 'vote.force', 'vote.reset', 'quiz.extend', 'quiz.reset',
+  'challenge.open', 'challenge.close', 'challenge.extend', 'challenge.force', 'challenge.reset',
+];
+
+// Índex d'opció vàlid: un enter dins el rang (rebutja 0.5, "1.5", null, "").
+function validIndex(value, length) {
+  const n = typeof value === 'number' ? value : (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
+  return Number.isInteger(n) && n >= 0 && n < length ? n : null;
+}
+
+function extendSeconds(value, def) {
+  const n = Number(value);
+  return n > 0 ? Math.min(n, MAX_EXTEND_SECONDS) : def;
+}
 
 class CommandError extends Error {}
 
@@ -40,13 +56,17 @@ class Engine extends EventEmitter {
     this.live = null; // tocs del repte en curs, abans de desar-los al diari
     this.drawings = new Map(); // id del missatge -> dibuix (data URL)
     this.state = initialState();
+    // Avisos de la recuperació: el servidor els escriu al registre (aquí encara no hi ha oients).
+    this.replayWarnings = [];
     const events = this.journal.readAll();
     for (const ev of events) {
       try {
         this.state = applyEvent(this.state, ev);
         this.absorb(ev);
       } catch (err) {
-        this.emit('warning', 'Event ' + ev.seq + ' no aplicable en recuperar: ' + err.message);
+        this.replayWarnings.push('Event ' + ev.seq + ' no aplicable en recuperar: ' + err.message);
+        // El número d'event no es reutilitza encara que l'event no s'hagi pogut aplicar.
+        if (Number(ev.seq) > this.state.seq) this.state = Object.assign({}, this.state, { seq: Number(ev.seq) });
       }
     }
     this.recovered = events.length > 0;
@@ -117,7 +137,9 @@ class Engine extends EventEmitter {
       if (!v) return { action: 'vote.open' };
       if (v.status === 'open') return { action: 'vote.close' };
       if (v.status === 'tie') return { action: 'none', reason: 'Empat: tria el resultat' };
-      return { action: 'enter', cueId: cue.options[v.result].goto };
+      const option = cue.options[v.result];
+      if (!option) return { action: 'none', reason: 'Resultat no vàlid: força una opció o reinicia la votació' };
+      return { action: 'enter', cueId: option.goto };
     }
     if (cue.type === 'challenge') {
       const c = s.challenges[cue.id];
@@ -139,7 +161,7 @@ class Engine extends EventEmitter {
     if (!cue || s.ended) return [];
     if (cue.type === 'vote') {
       const v = s.votes[cue.id];
-      if (v && v.status === 'closed') return [cue.options[v.result].goto];
+      if (v && v.status === 'closed') return cue.options[v.result] ? [cue.options[v.result].goto] : [];
       return Array.from(new Set(cue.options.map((o) => o.goto)));
     }
     if (cue.type === 'challenge') {
@@ -218,6 +240,10 @@ class Engine extends EventEmitter {
 
   execute(cmd) {
     const s = this.state;
+    // Ordres del panell lligades a una cue: si mentrestant s'ha canviat de cue, no s'apliquen a la nova.
+    if (cmd.expectCue != null && CUE_BOUND.includes(cmd.name) && cmd.expectCue !== s.cueId) {
+      throw new CommandError('La cue ha canviat mentrestant. Mira on som i torna-ho a provar.');
+    }
     // GO/ENRERE amb expectNav: només si ningú no ha avançat des que es va prémer.
     if ((cmd.name === 'go' || cmd.name === 'back') && cmd.expectNav != null && cmd.expectNav !== (s.navSeq || 0)) {
       throw new CommandError('Ja s\'ha avançat (algú altre ha premut). Mira on som i torna-ho a provar.');
@@ -236,7 +262,13 @@ class Engine extends EventEmitter {
         return;
       }
       case 'back': {
-        if (s.ended) return this.enter(s.cueId, 'reenter');
+        if (s.ended) {
+          // Tornant de la fi a una cue amb passos, al darrer pas (on s'havia acabat).
+          this.enter(s.cueId, 'reenter');
+          const steps = this.stepCount(this.currentCue());
+          if (steps > 1 && s.step > 0) this.goToStep(this.currentCue(), Math.min(s.step, steps - 1));
+          return;
+        }
         // Dins d'una cue amb passos, ENRERE torna al pas anterior.
         if (s.step > 0 && this.stepCount(this.currentCue()) > 0) {
           this.goToStep(this.currentCue(), s.step - 1);
@@ -261,9 +293,13 @@ class Engine extends EventEmitter {
       }
       case 'jump':
         return this.enter(cmd.cueId, s.started ? 'jump' : 'start');
-      case 'restart':
+      case 'restart': {
         if (!s.cueId) throw new CommandError('L\'espectacle no ha començat.');
+        // Reiniciar un qüestionari el torna a començar de zero (sense les respostes d'abans).
+        const cur = this.currentCue();
+        if (cur && cur.type === 'quiz' && s.quiz[cur.id]) this.record('quiz.clear', { cueId: cur.id });
         return this.enter(s.cueId, 'reenter');
+      }
       case 'pause':
         if (!s.cueId) throw new CommandError('L\'espectacle no ha començat.');
         this.record('playback.pause', { paused: cmd.paused != null ? !!cmd.paused : !s.paused });
@@ -286,15 +322,15 @@ class Engine extends EventEmitter {
         const cue = this.requireVoteCue(cmd.cueId);
         const v = s.votes[cue.id];
         if (!v || v.status !== 'open') throw new CommandError('La votació no està oberta.');
-        const secs = Number(cmd.seconds) > 0 ? Number(cmd.seconds) : 15;
+        const secs = extendSeconds(cmd.seconds, 15);
         const base = v.endsAt ? Math.max(v.endsAt, this.now()) : this.now();
         this.record('vote.extend', { cueId: cue.id, endsAt: base + secs * 1000 });
         return;
       }
       case 'vote.force': {
         const cue = this.requireVoteCue(cmd.cueId);
-        const option = Number(cmd.option);
-        if (!(option >= 0 && option < cue.options.length)) throw new CommandError('Opció no vàlida.');
+        const option = validIndex(cmd.option, cue.options.length);
+        if (option === null) throw new CommandError('Opció no vàlida.');
         this.record('vote.force', {
           cueId: cue.id, result: option, source: cmd.source === 'manual' ? 'manual' : 'operator',
         });
@@ -306,15 +342,15 @@ class Engine extends EventEmitter {
         return;
       }
       case 'ballot':
-        return this.ballot(cmd.deviceId, Number(cmd.option));
+        return this.ballot(cmd.deviceId, cmd.option);
       case 'answer':
-        return this.quizAnswer(cmd.deviceId, Number(cmd.option));
+        return this.quizAnswer(cmd.deviceId, cmd.option);
       case 'quiz.extend': {
         const cue = this.requireCue('quiz', 'No hi ha cap qüestionari en aquesta cue.');
         if (quiz.stepInfo(cue, s.step).kind !== 'open' || !s.stepEndsAt) {
           throw new CommandError('No hi ha cap pregunta oberta.');
         }
-        const secs = Number(cmd.seconds) > 0 ? Number(cmd.seconds) : 15;
+        const secs = extendSeconds(cmd.seconds, 15);
         this.record('step.extend', { cueId: cue.id, endsAt: Math.max(s.stepEndsAt, this.now()) + secs * 1000 });
         return;
       }
@@ -338,7 +374,7 @@ class Engine extends EventEmitter {
         const cue = this.requireCue('challenge', 'No hi ha cap repte en aquesta cue.');
         const c = s.challenges[cue.id];
         if (!c || c.status !== 'open') throw new CommandError('El repte no està en marxa.');
-        const secs = Number(cmd.seconds) > 0 ? Number(cmd.seconds) : 10;
+        const secs = extendSeconds(cmd.seconds, 10);
         this.record('challenge.extend', { cueId: cue.id, endsAt: Math.max(c.endsAt, this.now()) + secs * 1000 });
         return;
       }
@@ -434,7 +470,8 @@ class Engine extends EventEmitter {
     const cue = this.currentCue();
     const v = cue && cue.type === 'vote' ? s.votes[cue.id] : null;
     if (!v || v.status !== 'open') throw new CommandError('Ara no hi ha cap votació oberta.');
-    if (!(option >= 0 && option < cue.options.length)) throw new CommandError('Opció no vàlida.');
+    option = validIndex(option, cue.options.length);
+    if (option === null) throw new CommandError('Opció no vàlida.');
     if (v.ballots[participantId] === option) return;
     this.record('vote.ballot', { cueId: cue.id, participantId, option });
   }
@@ -448,7 +485,8 @@ class Engine extends EventEmitter {
     const now = this.now();
     if (s.stepEndsAt && now > s.stepEndsAt + ANSWER_GRACE_MS) throw new CommandError('S\'ha acabat el temps!');
     const question = cue.questions[info.q];
-    if (!(option >= 0 && option < question.options.length)) throw new CommandError('Opció no vàlida.');
+    option = validIndex(option, question.options.length);
+    if (option === null) throw new CommandError('Opció no vàlida.');
     const answers = (s.quiz[cue.id] && s.quiz[cue.id][info.q]) || {};
     if (answers[pid]) throw new CommandError('Ja has respost aquesta pregunta.');
     const ms = Math.min(question.duration * 1000, Math.max(0, now - s.stepAt));
@@ -615,7 +653,7 @@ class Engine extends EventEmitter {
     if (cue.type === 'quiz' && s.stepEndsAt && quiz.stepInfo(cue, s.step).kind === 'open') {
       const step = s.step;
       const enterSeq = s.enterSeq;
-      at(s.stepEndsAt, () => {
+      at(s.stepEndsAt + ANSWER_GRACE_MS, () => {
         const now = this.state;
         if (now.cueId === cue.id && now.enterSeq === enterSeq && now.step === step) {
           this.safely('Tancament de la pregunta', () => this.goToStep(cue, step + 1));

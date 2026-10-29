@@ -16,8 +16,26 @@ function canonical(value) {
 
 const same = (a, b) => canonical(a) === canonical(b);
 
+let currentDoc = null;
 function nodeJS(node) {
+  if (node && typeof node.toJS === 'function') return node.toJS(currentDoc); // resol àlies
   return node && typeof node.toJSON === 'function' ? node.toJSON() : node;
+}
+
+const plain = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+// Actualitza un mapa clau a clau: els comentaris de les claus que no canvien es conserven.
+function mergeMap(doc, node, obj) {
+  for (const pair of node.items.slice()) {
+    const k = nodeJS(pair.key);
+    if (!(k in obj)) node.delete(k);
+  }
+  for (const key of Object.keys(obj)) {
+    const cur = node.get(key, true);
+    if (same(nodeJS(cur), obj[key])) continue;
+    if (YAML.isMap(cur) && plain(obj[key])) mergeMap(doc, cur, obj[key]);
+    else node.set(key, doc.createNode(obj[key]));
+  }
 }
 
 function mergeSeq(doc, key, list) {
@@ -30,20 +48,17 @@ function mergeSeq(doc, key, list) {
       used.add(match);
       return match;
     }
-    // El mateix element (per id) modificat: node nou amb el format i els comentaris de l'anterior.
+    // El mateix element (per id) modificat: s'actualitza clau a clau (conserva format i comentaris).
     const prev = item && item.id != null
       ? oldItems.find((n) => !used.has(n) && YAML.isMap(n) && String(n.get('id')) === String(item.id)) : null;
-    const node = doc.createNode(item);
-    if (prev) {
+    if (prev && plain(item)) {
       used.add(prev);
-      node.flow = prev.flow;
-      node.commentBefore = prev.commentBefore;
-      node.comment = prev.comment;
-      node.spaceBefore = prev.spaceBefore;
-    } else {
-      node.flow = key === 'participants';
-      node.spaceBefore = key === 'cues';
+      mergeMap(doc, prev, item);
+      return prev;
     }
+    const node = doc.createNode(item);
+    node.flow = key === 'participants';
+    node.spaceBefore = key === 'cues';
     return node;
   });
   if (old && YAML.isSeq(old)) old.items = items;
@@ -63,6 +78,7 @@ function mergeShow(text, raw) {
     // YAML il·legible: es reescriu sencer
   }
   const doc = YAML.parseDocument(text || '');
+  currentDoc = doc;
   if (!doc.contents || !YAML.isMap(doc.contents)) doc.contents = doc.createNode({});
   for (const pair of doc.contents.items.slice()) {
     const k = nodeJS(pair.key);
@@ -72,7 +88,9 @@ function mergeShow(text, raw) {
     if ((key === 'participants' || key === 'cues') && Array.isArray(raw[key])) {
       mergeSeq(doc, key, raw[key]);
     } else if (!same(nodeJS(doc.get(key, true)), raw[key])) {
-      doc.set(key, doc.createNode(raw[key]));
+      const cur = doc.get(key, true);
+      if (YAML.isMap(cur) && plain(raw[key])) mergeMap(doc, cur, raw[key]);
+      else doc.set(key, doc.createNode(raw[key]));
     }
   }
   return doc.toString({ lineWidth: 0 });

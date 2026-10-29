@@ -82,6 +82,8 @@
 
   async function save(force) {
     if (!raw) return;
+    // Un camp a mig editar (p. ex. un id) s'aplica abans de desar.
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     clearTimeout(validateTimer);
     setStatus('Desant…');
     const r = await socket.cmd({ name: 'show.save', raw, mtime, force: !!force });
@@ -237,7 +239,10 @@
     } else if (field.type === 'number') {
       node = el('input', { type: 'number', min: field.min, max: field.max, step: field.step || 1, placeholder: field.default != null ? String(field.default) : '' });
       node.value = value == null ? '' : String(value);
-      node.addEventListener('input', () => onChange(node.value === '' ? '' : Number(node.value)));
+      node.addEventListener('input', () => {
+        if (node.validity && node.validity.badInput) return; // a mig escriure (p. ex. "1e" o "0,"): no es toca
+        onChange(node.value === '' ? '' : Number(node.value));
+      });
     } else if (field.type === 'select') {
       node = el('select');
       field.options.forEach(([v, t]) => node.append(el('option', { value: v, text: t })));
@@ -313,8 +318,16 @@
   function optionsEditor(cue) {
     if (!Array.isArray(cue.opcions)) cue.opcions = [];
     const box = el('div', { class: 'sublist' });
+    // «Si ningú vota» apunta a una opció concreta: si es mouen o s'esborren opcions, la segueix.
+    let chosen = null;
+    const keepDefault = () => {
+      const idx = cue.opcions.indexOf(chosen);
+      if (idx > 0) cue.per_defecte = idx;
+      else delete cue.per_defecte;
+    };
     const draw = () => {
       box.textContent = '';
+      chosen = cue.opcions[cue.per_defecte != null ? cue.per_defecte : 0] || null;
       cue.opcions.forEach((o, i) => {
         const text = el('input', { type: 'text', placeholder: 'Text de l\'opció' });
         text.value = o.text || '';
@@ -323,7 +336,7 @@
         goto.value = o.va_a || '';
         goto.addEventListener('change', () => { o.va_a = goto.value; markDirty(); });
         box.append(el('div', { class: 'subrow' }, [el('b', { text: LETTERS[i] || String(i + 1) }), text, el('span', { text: '→' }), goto]
-          .concat(moveButtons(cue.opcions, i, () => { draw(); renderPerDefault(); }))));
+          .concat(moveButtons(cue.opcions, i, () => { keepDefault(); draw(); renderPerDefault(); }))));
       });
       const add = el('button', { class: 'mini', text: '+ Opció', type: 'button' });
       add.disabled = cue.opcions.length >= 4;
@@ -376,15 +389,18 @@
     return box;
   }
 
-  // Les opcions buides de les preguntes no s'han d'escriure al fitxer.
-  function cleanForSave() {
-    raw.cues.forEach((c) => {
+  // Còpia per enviar sense les opcions buides de les preguntes (el guió que s'edita no es toca,
+  // perquè els camps segueixen lligats a les seves posicions).
+  function cleaned(source) {
+    const copy = JSON.parse(JSON.stringify(source));
+    (copy.cues || []).forEach((c) => {
       (c.preguntes || []).forEach((q) => {
         if (Array.isArray(q.opcions)) {
           while (q.opcions.length && !String(q.opcions[q.opcions.length - 1] || '').trim()) q.opcions.pop();
         }
       });
     });
+    return copy;
   }
 
   function diplomaEditor(cue) {
@@ -465,11 +481,25 @@
     table.append(el('tr', {}, S.PARTICIPANT.map((f) => el('th', { text: f.label })).concat([el('th')])));
     raw.participants.forEach((p, i) => {
       const cells = S.PARTICIPANT.map((f) => {
-        const node = input(f, p[f.key], (v) => {
-          const old = p.id;
-          setKey(p, f.key, v);
-          if (f.key === 'id') renameParticipant(String(old), String(v));
-        });
+        let node;
+        if (f.key === 'id') {
+          // L'id es canvia en acabar d'escriure (no a cada tecla) i només si no el té ningú més.
+          node = input(f, p.id, () => markDirty());
+          node.addEventListener('change', () => {
+            const newId = node.value.trim();
+            const old = String(p.id);
+            if (!newId || /\s/.test(newId) || raw.participants.some((x) => x !== p && String(x.id) === newId)) {
+              toast(!newId ? 'L\'id no pot quedar buit.' : /\s/.test(newId) ? 'L\'id no pot tenir espais.' : 'Ja hi ha un participant amb l\'id «' + newId + '».');
+              node.value = old;
+              return;
+            }
+            p.id = newId;
+            renameParticipant(old, newId);
+            markDirty();
+          });
+        } else {
+          node = input(f, p[f.key], (v) => setKey(p, f.key, v));
+        }
         if (f.width) node.style.width = f.width + 'px';
         return el('td', {}, [node]);
       });
@@ -524,10 +554,14 @@
       return;
     }
     const idField = S.COMMON_START[0];
-    const idInput = input(idField, cue.id, () => {});
+    const idInput = input(idField, cue.id, () => markDirty());
     idInput.addEventListener('change', () => {
       const newId = idInput.value.trim();
-      if (!newId) { idInput.value = cue.id; return; }
+      if (!newId || /\s/.test(newId) || raw.cues.some((x) => x !== cue && String(x.id) === newId)) {
+        toast(!newId ? 'L\'id no pot quedar buit.' : /\s/.test(newId) ? 'L\'id no pot tenir espais.' : 'Ja hi ha una cue amb l\'id «' + newId + '».');
+        idInput.value = cue.id;
+        return;
+      }
       const old = String(cue.id);
       cue.id = newId;
       renameCue(old, newId);
@@ -570,7 +604,7 @@
   // Abans d'enviar (validar o desar), treure les opcions buides de les preguntes.
   const originalCmd = socket.cmd.bind(socket);
   socket.cmd = (cmd) => {
-    if (cmd.name === 'show.validate' || cmd.name === 'show.save') cleanForSave();
+    if ((cmd.name === 'show.validate' || cmd.name === 'show.save') && cmd.raw) cmd = Object.assign({}, cmd, { raw: cleaned(cmd.raw) });
     return originalCmd(cmd);
   };
 })();

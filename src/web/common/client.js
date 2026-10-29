@@ -91,8 +91,11 @@
   };
 
   // Ordre sense esperar resposta (p. ex. la posició del vídeo).
+  // Retorna false si no s'ha pogut enviar (sense connexió).
   GalaSocket.prototype.notify = function (cmd) {
-    if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify({ type: 'cmd', cmd }));
+    if (!this.ws || this.ws.readyState !== 1) return false;
+    this.ws.send(JSON.stringify({ type: 'cmd', cmd }));
+    return true;
   };
 
   GalaSocket.prototype.serverNow = function () {

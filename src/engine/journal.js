@@ -10,12 +10,17 @@ class FileJournal {
     this.file = file;
     this.log = log;
     this.fd = null;
+    this.needsNewline = false;
     fs.mkdirSync(path.dirname(file), { recursive: true });
   }
 
   readAll() {
     if (!fs.existsSync(this.file)) return [];
-    const lines = fs.readFileSync(this.file, 'utf8').split('\n').filter((l) => l.trim() !== '');
+    const text = fs.readFileSync(this.file, 'utf8');
+    // Després d'un tall de corrent l'última línia pot quedar a mitges: el següent event
+    // ha de començar en una línia nova, o es perdria en la propera recuperació.
+    this.needsNewline = text.length > 0 && !text.endsWith('\n');
+    const lines = text.split('\n').filter((l) => l.trim() !== '');
     const events = [];
     lines.forEach((line, i) => {
       try {
@@ -30,7 +35,8 @@ class FileJournal {
 
   append(event) {
     if (this.fd === null) this.fd = fs.openSync(this.file, 'a');
-    fs.writeSync(this.fd, JSON.stringify(event) + '\n');
+    fs.writeSync(this.fd, (this.needsNewline ? '\n' : '') + JSON.stringify(event) + '\n');
+    this.needsNewline = false;
     fs.fsyncSync(this.fd);
   }
 

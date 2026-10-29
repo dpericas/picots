@@ -51,6 +51,10 @@ function parseChoices(show) {
   (arg('branques') || '').split(',').filter(Boolean).forEach((pair) => {
     const [id, value] = pair.split(':');
     const v = String(value || '').trim().toUpperCase();
+    if (!v) {
+      log.warn('--branques: «' + id + '» sense opció; s\'usa la per defecte.');
+      return;
+    }
     votes[id] = /^[A-D]$/.test(v) ? v.charCodeAt(0) - 65 : Number(v);
     if (!show.cues.some((c) => c.id === id && c.type === 'vote')) log.warn('--branques: «' + id + '» no és cap votació.');
   });
@@ -119,7 +123,7 @@ function encodeSegment(seg, out, W, H) {
   if (seg.kind === 'video') {
     const info = probe(seg.file);
     const args = ['-i', seg.file];
-    let a = '[0:a]' + AFMT + '[a]';
+    let a = '[0:a]' + AFMT + ',apad[a]'; // àudio més curt que la imatge: s'omple de silenci
     if (!info.audio) {
       args.push('-f', 'lavfi', '-t', String(info.duration), '-i', 'anullsrc=r=48000:cl=stereo');
       a = '[1:a]' + AFMT + '[a]';
@@ -135,15 +139,16 @@ function encodeSegment(seg, out, W, H) {
         '-map', '[v]', '-map', '[a]', '-t', String(seg.seconds)], videoOut(W, H), [out]));
     return;
   }
-  // Diapositives: cada foto `interval` segons, amb la música de la cue.
+  // Diapositives: cada foto `interval` segons, amb la música de la cue. Les fotos van en una
+  // llista (concat) perquè l'ordre no passi del límit de llargada de Windows amb moltes fotos.
   const total = seg.images.length * seg.interval;
-  const args = [];
-  seg.images.forEach((img) => args.push('-loop', '1', '-framerate', '30', '-t', String(seg.interval), '-i', img));
+  const list = out + '.fotos.txt';
+  const q = (f) => 'file \'' + f.replace(/'/g, '\'\\\'\'') + '\'';
+  fs.writeFileSync(list, seg.images.map((img) => q(img) + '\nduration ' + seg.interval).join('\n') +
+    '\n' + q(seg.images[seg.images.length - 1]) + '\n');
   const au = audioInput(seg.audio, total);
-  const n = seg.images.length;
-  const v = seg.images.map((_, i) => '[' + i + ':v]' + SCALE(W, H) + '[i' + i + ']').join(';') + ';' +
-    seg.images.map((_, i) => '[i' + i + ']').join('') + 'concat=n=' + n + ':v=1:a=0[v]';
-  ffmpeg(args.concat(au.args, ['-filter_complex', v + ';[' + n + ':a]' + au.filter + '[a]', '-map', '[v]', '-map', '[a]',
+  ffmpeg(['-f', 'concat', '-safe', '0', '-i', list].concat(au.args, ['-filter_complex',
+    '[0:v]' + SCALE(W, H) + '[v];[1:a]' + au.filter + '[a]', '-map', '[v]', '-map', '[a]',
     '-t', String(total)], videoOut(W, H), [out]));
 }
 
@@ -175,12 +180,17 @@ async function main() {
   }
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gala-reserva-'));
-  const win = new BrowserWindow({
-    show: false, width: W, height: H, useContentSize: true,
-    webPreferences: { offscreen: true, sandbox: true, contextIsolation: true },
+  process.on('SIGINT', () => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    process.exit(130);
   });
-  win.webContents.setAudioMuted(true);
+  let win = null;
   try {
+    win = new BrowserWindow({
+      show: false, width: W, height: H, useContentSize: true,
+      webPreferences: { offscreen: true, sandbox: true, contextIsolation: true },
+    });
+    win.webContents.setAudioMuted(true);
     const t0 = Date.now();
     const files = [];
     const entries = [];
@@ -215,8 +225,9 @@ async function main() {
       Math.round(fs.statSync(out).size / 1048576) + ' MB). Índex: ' + indexFile);
     return 0;
   } finally {
-    win.destroy();
+    if (win) win.destroy();
     fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(out + '.part.mp4', { force: true });
   }
 }
 

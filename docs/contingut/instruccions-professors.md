@@ -51,6 +51,7 @@ mentre surt la foto.
 Moltes gràcies!
 **[Nom de qui ho coordina] · [contacte]**
 
+<!-- intern: el que hi ha a sota no surt al PDF -->
 ---
 
 ### Per a qui munta l'espectacle (no cal enviar)

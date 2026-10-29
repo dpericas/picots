@@ -63,6 +63,7 @@ la versió oficial és la de l'escola. 😉
 Moltes gràcies!
 **[Nom de qui ho coordina] · [contacte]**
 
+<!-- intern: el que hi ha a sota no surt al PDF -->
 ---
 
 ### Per a qui prepara els vídeos (no cal enviar a les famílies)

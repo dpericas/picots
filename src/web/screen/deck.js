@@ -42,7 +42,11 @@
     });
     v.addEventListener('error', () => {
       const src = v.getAttribute('src');
-      if (src && this.opts.onError) this.opts.onError(src, v.error ? 'codi ' + v.error.code + ' ' + (v.error.message || '') : 'error');
+      // El tercer paràmetre diu si és el vídeo de la cue actual (no una precàrrega).
+      if (src && this.opts.onError) {
+        this.opts.onError(src, v.error ? 'codi ' + v.error.code + ' ' + (v.error.message || '') : 'error',
+          v === this.active || v === this.pending);
+      }
     });
     this.container.append(v);
     this.pool.push(v);

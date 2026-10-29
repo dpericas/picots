@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, Menu, dialog, powerSaveBlocker, screen, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, powerSaveBlocker, screen, session, shell } = require('electron');
 
 const { makeLogger, setLogFile, closeLogFile, timestamp } = require('../common/log');
 const { wipeTargets, performWipe } = require('../tools/wipe');
@@ -123,14 +123,27 @@ function escapeHtml(t) {
 
 // Pàgines d'impressió (/diplomes, /targetes): es carreguen en una finestra oculta i es desen en PDF.
 async function exportPdf(page, fileName, landscape) {
+  if (!server) return;
+  // Primer es comprova que la pàgina existeix (p. ex. sense cue de mencions no hi ha diplomes).
+  const head = await fetch(server.localUrl + page);
+  if (!head.ok) {
+    dialog.showErrorBox('Exportar PDF', (await head.text()).replace(/<[^>]+>/g, '').trim() || 'La pàgina no està disponible.');
+    return;
+  }
   const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });
+  let timer = null;
   try {
     const ready = new Promise((resolve) => {
-      const check = () => (win.getTitle() === 'ready' ? resolve() : setTimeout(check, 100));
+      const check = () => {
+        if (win.isDestroyed()) return;
+        if (win.getTitle() === 'ready') resolve();
+        else timer = setTimeout(check, 100);
+      };
       win.webContents.once('did-finish-load', check);
     });
     await win.loadURL(server.localUrl + page);
     await Promise.race([ready, new Promise((r) => setTimeout(r, 10000))]);
+    clearTimeout(timer);
     const pdf = await win.webContents.printToPDF({
       landscape, pageSize: 'A4', printBackground: true, margins: { marginType: 'none' }, preferCSSPageSize: true,
     });
@@ -147,12 +160,14 @@ async function exportPdf(page, fileName, landscape) {
     log.error('No s\'ha pogut exportar ' + page + ': ' + err.message);
     dialog.showErrorBox('Exportar PDF', 'No s\'ha pogut crear el PDF:\n\n' + err.message);
   } finally {
+    clearTimeout(timer);
     win.destroy();
   }
 }
 
 // Resum de la gala (HTML autònom). Retorna true si s'ha desat.
 async function saveSummary() {
+  if (!server) return false;
   const r = await dialog.showSaveDialog(controlWin, {
     title: 'Desar el resum de la gala',
     defaultPath: path.join(app.getPath('documents'), 'resum-gala-' + timestamp().slice(0, 10) + '.html'),
@@ -167,6 +182,7 @@ async function saveSummary() {
 
 // Privacitat: després de la gala, esborra les dades (i, si es vol, fotos, vídeos i guió).
 async function wipeAfterGala() {
+  if (!server) return;
   const level = dialog.showMessageBoxSync(controlWin, {
     type: 'warning',
     title: 'Esborrar dades després de la gala',
@@ -207,8 +223,17 @@ async function wipeAfterGala() {
   quitting = true;
   const s = server;
   server = null;
+  // Primer es tanquen les finestres (deixen de demanar fitxers) i el servidor.
+  BrowserWindow.getAllWindows().filter((w) => w !== controlWin).forEach((w) => w.destroy());
   await s.close();
   await closeLogFile();
+  // La memòria cau del navegador intern també té còpies de fotos i vídeos.
+  try {
+    await session.defaultSession.clearCache();
+    await session.defaultSession.clearStorageData();
+  } catch (err) {
+    // no és greu: es continua amb l'esborrat de les carpetes
+  }
   const result = performWipe(plan.targets);
   dialog.showMessageBoxSync({
     type: result.failed.length ? 'error' : 'info',
@@ -295,8 +320,15 @@ function createControlWindow() {
   watchRenderer(controlWin, 'panell de control');
   // Editor, diplomes i targetes s'obren en finestres pròpies, grans.
   controlWin.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(server.localUrl)) {
-      shell.openExternal(url);
+    let target;
+    try {
+      target = new URL(url);
+    } catch (err) {
+      return { action: 'deny' };
+    }
+    if (!server || target.origin !== new URL(server.localUrl).origin) {
+      // Fora de l'app, només adreces web (mai fitxers ni altres protocols).
+      if (target.protocol === 'http:' || target.protocol === 'https:') shell.openExternal(url);
       return { action: 'deny' };
     }
     return {
@@ -330,8 +362,8 @@ function buildMenu() {
     {
       label: 'Gala',
       submenu: [
-        { label: 'Obrir carpeta de l\'espectacle', click: () => shell.openPath(server.showDir) },
-        { label: 'Obrir carpeta de dades i registres', click: () => shell.openPath(server.dataDir) },
+        { label: 'Obrir carpeta de l\'espectacle', click: () => server && shell.openPath(server.showDir) },
+        { label: 'Obrir carpeta de dades i registres', click: () => server && shell.openPath(server.dataDir) },
         { label: 'Exportar targetes QR a PDF…', click: () => exportPdf('/targetes', 'targetes-qr.pdf', false) },
         { label: 'Exportar diplomes a PDF…', click: () => exportPdf('/diplomes', 'diplomes.pdf', true) },
         { label: 'Exportar guió del presentador a PDF…', click: () => exportPdf('/guio', 'guio-presentador.pdf', false) },

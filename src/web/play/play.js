@@ -195,7 +195,9 @@
   }
 
   // --- Repte: els tocs s'acumulen i s'envien en grup ---
-  $('ch-tap').addEventListener('pointerdown', (e) => {
+  // Pointer Events no existeix a iOS 12 i anteriors (tauletes antigues): llavors, tàctil.
+  const DOWN = window.PointerEvent ? 'pointerdown' : 'touchstart';
+  $('ch-tap').addEventListener(DOWN, (e) => {
     e.preventDefault();
     const c = state && state.challenge;
     if (!c || c.status !== 'open') return;
@@ -213,8 +215,8 @@
   setInterval(() => {
     if (!pendingTaps) return;
     const n = Math.min(pendingTaps, MAX_TAPS_PER_MSG);
-    pendingTaps -= n;
-    socket.notify({ name: 'tap', n });
+    // Només es descompten si s'han enviat: en una microtallada es guarden per a després.
+    if (socket.notify({ name: 'tap', n })) pendingTaps -= n;
   }, TAP_SEND_MS);
 
   function renderChallenge(c) {
@@ -246,12 +248,17 @@
   clearCanvas();
 
   function canvasPoint(e) {
+    const p = e.touches && e.touches.length ? e.touches[0] : e;
     const r = canvas.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * canvas.width / r.width, y: (e.clientY - r.top) * canvas.height / r.height };
+    return { x: (p.clientX - r.left) * canvas.width / r.width, y: (p.clientY - r.top) * canvas.height / r.height };
   }
-  canvas.addEventListener('pointerdown', (e) => {
+  const EV = window.PointerEvent
+    ? { down: 'pointerdown', move: 'pointermove', up: ['pointerup', 'pointercancel'] }
+    : { down: 'touchstart', move: 'touchmove', up: ['touchend', 'touchcancel'] };
+  canvas.addEventListener(EV.down, (e) => {
+    e.preventDefault();
     drawing = true;
-    canvas.setPointerCapture(e.pointerId);
+    if (e.pointerId != null && canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
     last = canvasPoint(e);
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -259,8 +266,9 @@
     ctx.fill();
     drawn = true;
   });
-  canvas.addEventListener('pointermove', (e) => {
+  canvas.addEventListener(EV.move, (e) => {
     if (!drawing) return;
+    e.preventDefault();
     const pt = canvasPoint(e);
     ctx.strokeStyle = color;
     ctx.lineWidth = 6;
@@ -271,7 +279,7 @@
     ctx.stroke();
     last = pt;
   });
-  ['pointerup', 'pointercancel'].forEach((t) => canvas.addEventListener(t, () => { drawing = false; }));
+  EV.up.forEach((t) => canvas.addEventListener(t, () => { drawing = false; }));
   $('wall-clear').addEventListener('click', clearCanvas);
   COLORS.forEach((c, i) => {
     const b = el('button', { class: i === 0 ? 'on' : '' });

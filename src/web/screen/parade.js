@@ -126,6 +126,18 @@
     this.showStep(this.step, person, false);
   };
 
+  // El vídeo del nen no es pot reproduir: surt directament la seva targeta.
+  Parade.prototype.videoFailed = function () {
+    const pv = this.pendingVideo;
+    if (pv) {
+      this.pendingVideo = null;
+      this.leaveVideoMode();
+      this.showStep(this.step, pv.person, pv.forward);
+    } else if (this.inVideo) {
+      this.videoEnded();
+    }
+  };
+
   Parade.prototype.leaveVideoMode = function () {
     this.inVideo = null;
     this.root.classList.remove('video-mode');

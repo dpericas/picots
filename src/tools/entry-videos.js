@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
+const { parseDuration } = require('../engine/timing');
 
 const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp'];
 const AUDIO_EXT = ['.mp3', '.m4a', '.aac', '.wav', '.ogg', '.flac'];
@@ -23,16 +24,30 @@ function naturalSort(a, b) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
 
-function readConfig(dir) {
+// Segons a partir de 45, "1:05" o "0,5" (coma decimal). null si no és vàlid.
+function seconds(value) {
+  if (value == null) return null;
+  const v = typeof value === 'string' ? value.trim().replace(',', '.') : value;
+  const n = parseDuration(v);
+  return n != null && isFinite(n) ? n : null;
+}
+
+function readConfig(dir, warnings, id) {
   const file = path.join(dir, 'config.yaml');
   if (!fs.existsSync(file)) return {};
   const raw = YAML.parse(fs.readFileSync(file, 'utf8')) || {};
   const out = {};
-  if (raw.inici != null) out.start = Number(raw.inici);
-  if (raw.durada != null) out.duration = Number(raw.durada);
-  if (raw.transicio != null) out.transition = Number(raw.transicio);
+  [['inici', 'start'], ['durada', 'duration'], ['transicio', 'transition']].forEach(([key, prop]) => {
+    if (raw[key] == null) return;
+    const v = seconds(raw[key]);
+    if (v == null) warnings.push(id + ': config.yaml "' + key + '" no és vàlid (' + raw[key] + '); s\'usa el valor per defecte.');
+    else out[prop] = v;
+  });
   return out;
 }
+
+// Fitxers ocults (p. ex. "._01.jpg" dels Mac) no són fotos ni cançons.
+const hidden = (f) => f.startsWith('.');
 
 /**
  * Feines a fer: una per cada carpeta de fonts que correspon a un participant.
@@ -54,7 +69,9 @@ function listJobs(opts) {
     }
     if (only && !only.includes(id)) continue;
     const dir = path.join(sourcesDir, id);
-    const files = fs.readdirSync(dir).sort(naturalSort);
+    const files = fs.readdirSync(dir).filter((f) => !hidden(f)).sort(naturalSort);
+    const heic = files.filter((f) => /\.hei[cf]$/i.test(f));
+    if (heic.length) warnings.push(id + ': ' + heic.length + ' fotos HEIC (iPhone) no es fan servir; converteix-les a JPG.');
     const images = files.filter((f) => IMAGE_EXT.includes(path.extname(f).toLowerCase())).map((f) => path.join(dir, f));
     const songs = files.filter((f) => AUDIO_EXT.includes(path.extname(f).toLowerCase())).map((f) => path.join(dir, f));
     if (images.length === 0) {
@@ -65,7 +82,7 @@ function listJobs(opts) {
     if (songs.length > 1) warnings.push(id + ': hi ha ' + songs.length + ' cançons; s\'usa ' + path.basename(songs[0]) + '.');
     let config;
     try {
-      config = readConfig(dir);
+      config = readConfig(dir, warnings, id);
     } catch (err) {
       warnings.push(id + ': config.yaml no és vàlid (' + err.message + '); s\'usen els valors per defecte.');
       config = {};
@@ -155,14 +172,35 @@ function joinArgs(clips, music, p, out) {
   return args;
 }
 
-// Cal refer el vídeo si no existeix o alguna font és més nova.
-function isStale(out, job) {
-  if (!fs.existsSync(out)) return true;
-  const t = fs.statSync(out).mtimeMs;
+// Empremta de les fonts i els ajustos: si canvia (fotos noves, esborrades, reordenades,
+// una altra cançó, una altra durada o resolució), cal refer el vídeo. No depèn de les
+// dates dels fitxers, que es conserven en copiar-los.
+function fingerprint(job, settings) {
   const inputs = job.images.concat(job.music ? [job.music] : []);
   const cfg = path.join(job.dir, 'config.yaml');
   if (fs.existsSync(cfg)) inputs.push(cfg);
-  return inputs.some((f) => fs.statSync(f).mtimeMs > t);
+  return JSON.stringify({
+    files: inputs.map((f) => {
+      const st = fs.statSync(f);
+      return [path.basename(f), st.size, Math.round(st.mtimeMs)];
+    }),
+    settings,
+  });
+}
+
+const manifestOf = (out) => out + '.fonts.json';
+
+function isStale(out, job, settings) {
+  if (!fs.existsSync(out)) return true;
+  try {
+    return fs.readFileSync(manifestOf(out), 'utf8') !== fingerprint(job, settings || {});
+  } catch (err) {
+    return true;
+  }
+}
+
+function writeManifest(out, job, settings) {
+  fs.writeFileSync(manifestOf(out), fingerprint(job, settings || {}));
 }
 
 /**
@@ -185,4 +223,4 @@ function updateShowText(text, mapping) {
   return { text: changed.length ? doc.toString({ lineWidth: 0 }) : text, changed };
 }
 
-module.exports = { listJobs, plan, clipArgs, joinArgs, isStale, updateShowText, DEFAULTS, TRANSITIONS };
+module.exports = { listJobs, plan, clipArgs, joinArgs, isStale, writeManifest, updateShowText, seconds, DEFAULTS, TRANSITIONS };

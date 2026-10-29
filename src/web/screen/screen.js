@@ -117,7 +117,19 @@
       lastPositionSent = now;
       socket.notify({ name: 'video.position', cueId: state.cue.id, enterSeq: state.enterSeq, step: state.step, t });
     },
-    onError: (src, msg) => reportMediaError(src, msg),
+    onError: (src, msg, current) => {
+      reportMediaError(src, msg);
+      if (!current || !state || !state.cue) return;
+      if (state.cue.type === 'parade' || state.cue.type === 'awards') {
+        // Sense vídeo, la targeta del nen (i la música de fons torna).
+        parade.videoFailed();
+        deck.release(0);
+        render();
+      } else if (state.cue.type === 'video' && state.cue.auto) {
+        // Un vídeo que havia de passar sol: es continua (el tècnic veu l'error al panell).
+        socket.cmd({ name: 'video.ended', cueId: state.cue.id, enterSeq: state.enterSeq });
+      }
+    },
     onMutedFallback: () => show('sound-hint', true),
     onSwap: () => {
       // Marge perquè el compositor tingui el fotograma a la pantalla abans de treure la capa.
@@ -217,6 +229,8 @@
     $('ch-players').textContent = '';
     wallShown = new Set();
     $('wall-grid').textContent = '';
+    delete $('wall-grid').dataset.ids; // que es torni a pintar en tornar a entrar al mur
+    show('ch-result', false);
     if (!cue) {
       deck.release(0);
       setMusic(null);

@@ -323,7 +323,9 @@ test('temporitzadors: la pregunta i el repte es tanquen sols', async () => {
     ok(e, { name: 'claim', deviceId: 'd-a', participantId: 'a' });
     ok(e, { name: 'go' });
     ok(e, { name: 'step', step: 2 });
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 400));
+    assert.strictEqual(e.state.step, 2, 'marge per a les respostes que arriben tard');
+    await new Promise((r) => setTimeout(r, 600));
     assert.strictEqual(e.state.step, 3, 'la pregunta passa sola a la solució');
     ok(e, { name: 'jump', cueId: 'r' });
     ok(e, { name: 'go' });
@@ -335,5 +337,85 @@ test('temporitzadors: la pregunta i el repte es tanquen sols', async () => {
     assert.deepStrictEqual(e.state.challenges.r.taps, { a: 4 });
   } finally {
     e.dispose();
+  }
+});
+
+// --- Correccions de la revisió ---
+
+test('revisió: opcions no enteres rebutjades; per_defecte i correcta han de ser enters', () => {
+  const e = makeEngine();
+  claimAll(e, ['a']);
+  const r = parseShow(YAML_SHOW.replace('correcta: B }', 'correcta: 1.5 }'));
+  assert.ok(r.problems.some((p) => p.level === 'error' && /"correcta"/.test(p.msg)));
+  ok(e, { name: 'go' });
+  ok(e, { name: 'step', step: 2 });
+  fail(e, { name: 'answer', deviceId: 'd-a', option: 0.5 }, /no vàlida/);
+  fail(e, { name: 'answer', deviceId: 'd-a', option: '' }, /no vàlida/);
+  ok(e, { name: 'answer', deviceId: 'd-a', option: '1' });
+});
+
+test('revisió: forçar un repte conserva els tocs encara no desats', () => {
+  const e = makeEngine();
+  claimAll(e);
+  ok(e, { name: 'jump', cueId: 'r' });
+  ok(e, { name: 'go' });
+  ok(e, { name: 'tap', deviceId: 'd-a', n: 12 });
+  ok(e, { name: 'challenge.force', result: 'success', source: 'manual' });
+  assert.strictEqual(e.challengeProgress(e.currentCue()).total, 12);
+});
+
+test('revisió: reiniciar un qüestionari esborra les respostes', () => {
+  const e = makeEngine();
+  claimAll(e, ['a', 'b']);
+  ok(e, { name: 'go' });
+  ok(e, { name: 'step', step: 2 });
+  ok(e, { name: 'answer', deviceId: 'd-a', option: 1 });
+  ok(e, { name: 'restart' });
+  assert.strictEqual(e.state.step, 0);
+  ok(e, { name: 'step', step: 2 });
+  ok(e, { name: 'answer', deviceId: 'd-a', option: 0 });
+});
+
+test('revisió: ENRERE després de la fi torna al darrer pas', () => {
+  const e = makeEngine({ yaml: YAML_SHOW.replace("  - { id: mur, tipus: mur, text: \"Envieu un missatge!\", maxim_per_nen: 2 }\n", '') });
+  ok(e, { name: 'jump', cueId: 'm' });
+  ok(e, { name: 'step', step: 4 });
+  ok(e, { name: 'go' }); // fi
+  assert.strictEqual(e.state.ended, true);
+  ok(e, { name: 'back' });
+  assert.deepStrictEqual([e.state.ended, e.state.step], [false, 4]);
+});
+
+test('revisió: les ordres lligades a una cue es rebutgen si la cue ha canviat', () => {
+  const e = makeEngine();
+  ok(e, { name: 'jump', cueId: 'm' });
+  fail(e, { name: 'step', step: 2, expectCue: 'q' }, /ha canviat/);
+  ok(e, { name: 'step', step: 2, expectCue: 'm' });
+});
+
+test('revisió: ids reservats rebutjats', () => {
+  const r = parseShow('participants: [{ id: constructor, nom: X }]\ncues:\n  - { id: toString, tipus: espera }');
+  assert.strictEqual(r.problems.filter((p) => /reservat/.test(p.msg)).length, 2);
+});
+
+test('revisió: després d\'un tall de corrent, el primer event nou no es perd', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { FileJournal } = require('../src/engine/journal');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gala-torn-'));
+  try {
+    const file = path.join(dir, 'journal.jsonl');
+    fs.writeFileSync(file, '{"seq":1,"t":1,"type":"cue.enter","cueId":"q","via":"start"}\n{"seq":2,"t":2,"type":"cue.st');
+    const show = makeShow();
+    let e = new Engine({ show, journal: new FileJournal(file), timers: false });
+    assert.strictEqual(e.state.cueId, 'q');
+    ok(e, { name: 'jump', cueId: 'm' });
+    e.journal.close();
+    e = new Engine({ show, journal: new FileJournal(file), timers: false });
+    assert.strictEqual(e.state.cueId, 'm', 'l\'event escrit després de la línia trencada es recupera');
+    e.journal.close();
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -248,6 +248,27 @@ nens de l'entrada i les mencions.
 Les cues de vídeo poden tenir un **rètol** (`rotol: "Mireia · tutora de P3"`) que surt a baix
 a l'esquerra els primers 7 segons: per als vídeos dels professors.
 
+## Vídeos del conte i muntatges
+
+```bash
+npm run story-video                    # totes les carpetes de fonts-conte/ amb guio.yaml
+npm run story-video -- --nomes=cap1    # només una
+```
+
+Cada carpeta `fonts-conte/<nom>/` té les il·lustracions, les veus, els vídeos i un `guio.yaml`
+amb les escenes: **il·lustració** (amb zoom lent, opcionalment **veu en off** —l'escena dura el
+que duri la veu— i **subtítol**), **vídeo** (p. ex. el d'un professor, amb **rètol** del nom) o
+**targeta de títol**. La **música de fons** va en bucle i baixa sola quan parla algú. Serveix per
+als capítols (`cap1`…) a partir d'il·lustracions i narració gravada amb el mòbil, per al muntatge
+«Els altres guardians» (vídeos curts amb el nom de cadascú) i per als professors que no poden
+gravar (foto + text llegit). Format i exemple: capçalera de `src/tools/story-video.js`.
+
+## Documents en PDF
+
+`npm run docs-pdf` genera a `docs/pdf/` els documents generals (instruccions per a famílies i
+professors —sense les notes internes—, proposta de conte, preguntes, mencions, calendari, prova a
+Windows i el pla del projecte). Cal `python3-markdown` i Chrome o Chromium.
+
 ## Targetes QR
 
 Botó **🪪 Targetes QR** del panell, o menú **Gala › Exportar targetes QR a PDF…**: 8 targetes

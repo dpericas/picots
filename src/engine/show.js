@@ -82,10 +82,13 @@ function normalizeCue(raw, index, problems) {
       text: o && o.text != null ? String(o.text) : '',
       goto: o && o.va_a != null ? String(o.va_a) : null,
     }));
-    if (!cue.tie) problems.push(problem('error', cue.id, 'Regla d\'empat desconeguda: "' + raw.empat + '".'));
+    if (!cue.tie) {
+      problems.push(problem('error', cue.id, 'Regla d\'empat desconeguda: "' + raw.empat + '".'));
+      cue.tie = 'random';
+    }
     if (!(cue.duration >= 0)) problems.push(problem('error', cue.id, '"temps" ha de ser un número >= 0.'));
     if (cue.options.length < 2) problems.push(problem('error', cue.id, 'Una votació necessita almenys 2 opcions.'));
-    if (!(cue.defaultOption >= 0 && cue.defaultOption < cue.options.length)) {
+    if (!(Number.isInteger(cue.defaultOption) && cue.defaultOption >= 0 && cue.defaultOption < cue.options.length)) {
       problems.push(problem('error', cue.id, '"per_defecte" ha de ser l\'índex d\'una opció (0..' +
         (cue.options.length - 1) + ').'));
     }
@@ -148,7 +151,7 @@ function normalizeCue(raw, index, problems) {
 
 // "correcta" admet la lletra de l'opció (A, B, C, D) o l'índex (0, 1, 2, 3).
 function parseCorrect(value) {
-  if (typeof value === 'number') return value;
+  if (typeof value === 'number') return Number.isInteger(value) ? value : -1;
   const t = String(value == null ? '' : value).trim().toUpperCase();
   if (/^[A-D]$/.test(t)) return t.charCodeAt(0) - 65;
   if (/^\d+$/.test(t)) return Number(t);
@@ -211,10 +214,16 @@ function normalize(doc, problems) {
   };
 }
 
+// Ids que xocarien amb les propietats dels objectes de JavaScript (p. ex. "constructor").
+function reservedId(id) {
+  return id in Object.prototype || id === '__proto__';
+}
+
 function validateRefs(show, problems) {
   const ids = new Set();
   for (const cue of show.cues) {
     if (ids.has(cue.id)) problems.push(problem('error', cue.id, 'Id de cue repetit.'));
+    if (reservedId(cue.id)) problems.push(problem('error', cue.id, 'Aquest id està reservat: tria\'n un altre.'));
     ids.add(cue.id);
   }
   for (const cue of show.cues) {
@@ -240,6 +249,7 @@ function validateRefs(show, problems) {
   const pids = new Set();
   for (const p of show.participants) {
     if (pids.has(p.id)) problems.push(problem('error', null, 'Participant amb id repetit: ' + p.id));
+    if (reservedId(p.id)) problems.push(problem('error', null, 'L\'id de participant "' + p.id + '" està reservat: tria\'n un altre.'));
     pids.add(p.id);
   }
   // Entrada triomfal i mencions: per defecte, tots els participants en l'ordre de la llista.

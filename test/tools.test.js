@@ -149,11 +149,12 @@ test('wipe: només esborra carpetes que són de l\'app', () => {
       fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
       fs.writeFileSync(path.join(root, rel), 'x');
     };
-    mk('dades/journal.jsonl'); mk('dades/registres/gala.log'); mk('show/show.yaml'); mk('show/media/a.jpg');
+    mk('dades/journal.jsonl'); mk('dades/secret'); mk('dades/registres/gala.log'); mk('show/show.yaml'); mk('show/media/a.jpg');
     mk('fonts-entrada/anna/01.jpg'); mk('reserva/gala-reserva.mp4'); mk('altres/important.txt');
     const dataDir = path.join(root, 'dades');
     const showDir = path.join(root, 'show');
-    assert.deepStrictEqual(wipeTargets({ dataDir, showDir, level: 'dades' }).targets, [dataDir]);
+    const realRoot = fs.realpathSync(root);
+    assert.deepStrictEqual(wipeTargets({ dataDir, showDir, level: 'dades' }).targets, [path.join(realRoot, 'dades')]);
     const all = wipeTargets({ dataDir, showDir, level: 'tot' });
     assert.deepStrictEqual(all.targets.map((t) => path.basename(t)), ['dades', 'show', 'fonts-entrada', 'reserva']);
     // Una carpeta de dades que no ho sembla no es toca.
@@ -161,6 +162,20 @@ test('wipe: només esborra carpetes que són de l\'app', () => {
     assert.deepStrictEqual(odd.targets, []);
     assert.strictEqual(odd.refused.length, 1);
     assert.strictEqual(wipeTargets({ dataDir: os.homedir(), showDir, level: 'dades' }).targets.length, 0);
+    // Una carpeta de dades amb fitxers que no són de l'app (p. ex. Documents) no es toca.
+    mk('dades/carta-personal.docx');
+    const foreign = wipeTargets({ dataDir, showDir, level: 'dades' });
+    assert.deepStrictEqual(foreign.targets, []);
+    assert.match(foreign.refused[0], /carta-personal/);
+    fs.rmSync(path.join(dataDir, 'carta-personal.docx'));
+    // Dades i espectacle a la mateixa carpeta: no s'esborra res.
+    const same = wipeTargets({ dataDir: showDir, showDir, level: 'tot' });
+    assert.deepStrictEqual(same.targets, []);
+    // Un enllaç a la carpeta de dades: s'esborra la carpeta real.
+    fs.symlinkSync(dataDir, path.join(root, 'enllac'));
+    const linked = wipeTargets({ dataDir: path.join(root, 'enllac'), showDir, level: 'dades' });
+    assert.deepStrictEqual(linked.targets, [fs.realpathSync(dataDir)]);
+    fs.rmSync(path.join(root, 'enllac'));
     const r = performWipe(all.targets);
     assert.strictEqual(r.failed.length, 0);
     assert.deepStrictEqual(fs.readdirSync(root), ['altres']);
@@ -209,4 +224,45 @@ test('La proposta de guió de docs/contingut és vàlida', () => {
   assert.deepStrictEqual(r.problems.filter((p) => p.level === 'error'), []);
   assert.strictEqual(r.show.participants.length, 23);
   assert.ok(r.show.cues.some((c) => c.type === 'video' && c.caption), 'els vídeos dels professors porten rètol');
+});
+
+const sv = require('../src/tools/story-video');
+
+test('story-video: guió d\'escenes, durades i errors', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gala-conte-'));
+  try {
+    ['01.png', 'veu.mp3', 'clip.mp4', 'musica.mp3'].forEach((f) => fs.writeFileSync(path.join(dir, f), 'x'));
+    const ok = sv.parseStoryboard([
+      'musica: musica.mp3', 'volum_musica: 0.5', 'escenes:',
+      '  - titol: "Capítol 1"',
+      '  - { imatge: 01.png, veu: veu.mp3, text: "Hola" }',
+      '  - { imatge: 01.png, durada: 6, moviment: no }',
+      '  - { video: clip.mp4, rotol: "Mireia · tutora de P3" }',
+    ].join('\n'), dir, 'cap1');
+    assert.deepStrictEqual(ok.errors, []);
+    const st = ok.story;
+    assert.strictEqual(st.output, 'media/video/cap1.mp4');
+    assert.strictEqual(st.musicVolume, 0.5);
+    assert.deepStrictEqual(st.scenes.map((s) => s.kind), ['title', 'image', 'image', 'video']);
+    assert.strictEqual(st.scenes[2].motion, false);
+    assert.strictEqual(st.scenes[3].caption, 'Mireia · tutora de P3');
+    assert.strictEqual(sv.sceneSeconds(st.scenes[0], null), 3);
+    assert.strictEqual(sv.sceneSeconds(st.scenes[1], 5), 5.6, 'amb veu: el que dura la veu + 0,6 s');
+    assert.strictEqual(sv.sceneSeconds(st.scenes[2], null), 6);
+    const bad = sv.parseStoryboard('escenes:\n  - { imatge: no.png }\n  - { imatge: 01.png, video: clip.mp4 }', dir, 'x');
+    assert.strictEqual(bad.story, null);
+    assert.match(bad.errors.join('\n'), /no es troba la imatge «no.png»/);
+    assert.match(bad.errors.join('\n'), /exactament un/);
+    fs.writeFileSync(path.join(dir, 'guio.yaml'), 'escenes: []');
+    assert.deepStrictEqual(sv.listStories(path.dirname(dir), [path.basename(dir)]), [path.basename(dir)]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('entry-videos: temps «1:05» i decimals amb coma a config.yaml', () => {
+  assert.strictEqual(ev.seconds('1:05'), 65);
+  assert.strictEqual(ev.seconds('0,5'), 0.5);
+  assert.strictEqual(ev.seconds(30), 30);
+  assert.strictEqual(ev.seconds('trenta'), null);
 });

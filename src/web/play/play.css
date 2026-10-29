@@ -69,7 +69,7 @@ footer { padding: 12px; text-align: center; }
 
 /* --- Repte --- */
 #ch-tap {
-  width: min(70vw, 300px); height: min(70vw, 300px); border-radius: 50%; border: 0; margin: 12px 0;
+  width: 70vw; height: 70vw; max-width: 300px; max-height: 300px; /* sense min(): navegadors antics */ border-radius: 50%; border: 0; margin: 12px 0;
   background: radial-gradient(circle at 35% 30%, #ffe27a, #f39c12 60%, #b8650b);
   color: #3a1f00; font-size: 40px; font-weight: 900; box-shadow: 0 10px 0 #8a4a05, 0 14px 30px #0008;
   touch-action: manipulation; user-select: none; -webkit-user-select: none;
@@ -92,7 +92,7 @@ footer { padding: 12px; text-align: center; }
 }
 #wall-emojis { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 #wall-emojis button { font-size: 28px; background: transparent; border: 0; padding: 2px 4px; }
-#wall-canvas { width: min(84vw, 320px); height: min(84vw, 320px); background: #fff; border-radius: 12px; touch-action: none; }
+#wall-canvas { width: 84vw; height: 84vw; max-width: 320px; max-height: 320px; background: #fff; border-radius: 12px; touch-action: none; }
 #wall-colors { display: flex; gap: 8px; }
 #wall-colors button { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; }
 #wall-colors button.on { border-color: #fff; transform: scale(1.15); }
@@ -120,11 +120,11 @@ footer { padding: 12px; text-align: center; }
   #names { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   #names .avatar { width: 84px; height: 84px; }
   #me-avatar { width: 200px; height: 200px; font-size: 64px; }
-  #ch-tap { width: min(48vh, 380px); height: min(48vh, 380px); font-size: 52px; }
+  #ch-tap { width: 48vh; height: 48vh; max-width: 380px; max-height: 380px; font-size: 52px; }
   #ch-msg { font-size: 28px; }
   #wall-input { font-size: 24px; }
   #wall-emojis button { font-size: 38px; }
-  #wall-canvas { width: min(56vh, 440px); height: min(56vh, 440px); }
+  #wall-canvas { width: 56vh; height: 56vh; max-width: 440px; max-height: 440px; }
   #wall-tabs button { font-size: 20px; padding: 10px 18px; }
   #wall-text { font-size: 30px; }
   #wall-send { font-size: 28px; padding: 16px 56px; }
