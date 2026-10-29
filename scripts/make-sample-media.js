@@ -14,6 +14,7 @@ const VIDEOS = [
   { file: 'media/video/cap1.mp4', color: '0x3355aa', freq: 440, seconds: 8 },
   { file: 'media/video/cap2a.mp4', color: '0x2e8b57', freq: 523, seconds: 8 },
   { file: 'media/video/cap2b.mp4', color: '0x8b3a3a', freq: 587, seconds: 8 },
+  { file: 'media/video/cap3.mp4', color: '0x6a3d9a', freq: 698, seconds: 6 },
   { file: 'media/video/final.mp4', color: '0xb8860b', freq: 659, seconds: 10 },
 ];
 const PHOTOS = { dir: 'media/records/P3', count: 5 };

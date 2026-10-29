@@ -21,7 +21,7 @@ test('El guió d\'exemple del projecte és vàlid', () => {
 test('Detecta referències trencades, ids repetits i tipus desconeguts', () => {
   const r = parseShow(`
 cues:
-  - { id: a, tipus: video, fitxer: a.mp4, seguent: zz }
+  - { id: a, tipus: video, fitxer: a.mp4, seguent: zz, fos: -1 }
   - { id: a, tipus: festa }
   - id: v
     tipus: votacio
@@ -35,6 +35,7 @@ cues:
   assert.match(text, /almenys 2 opcions/);
   assert.match(text, /per_defecte/);
   assert.match(text, /nope/);
+  assert.match(text, /"fos"/);
   assert.ok(hasErrors(r.problems));
 });
 

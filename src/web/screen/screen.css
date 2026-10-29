@@ -12,8 +12,14 @@ html, body {
   margin: 0; height: 100%; background: var(--bg); color: var(--fg);
   font-family: "Segoe UI", system-ui, sans-serif; overflow: hidden; cursor: none;
 }
-#stage, .layer, .overlay, #video { position: absolute; inset: 0; }
-#video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+#stage, .layer, .overlay, #videos { position: absolute; inset: 0; }
+/* Context d'apilament propi: el z-index dels vídeos no ha de passar per sobre de les capes. */
+#videos { z-index: 0; }
+.deck-video {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+  background: transparent; opacity: 0; /* transparent: sense negre abans del primer fotograma */
+}
+.deck-video.visible { opacity: 1; }
 .hidden { display: none !important; }
 .layer { display: flex; flex-direction: column; align-items: center; justify-content: center; }
 
@@ -23,6 +29,7 @@ html, body {
 }
 #slides img.on { opacity: 1; }
 
+#hold { background: #000; }
 #hold-text, #welcome-title {
   font-size: 6vw; font-weight: 700; text-align: center; padding: 0 5vw; line-height: 1.15;
 }

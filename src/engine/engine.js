@@ -82,6 +82,22 @@ class Engine extends EventEmitter {
     return next ? { action: 'enter', cueId: next } : { action: 'end' };
   }
 
+  // Cues que poden venir just després de l'actual (per precarregar vídeos).
+  // En una votació encara no decidida, totes les branques.
+  upcomingCueIds() {
+    const s = this.state;
+    if (!s.started) return this.show.cues.length ? [this.show.cues[0].id] : [];
+    const cue = this.currentCue();
+    if (!cue || s.ended) return [];
+    if (cue.type === 'vote') {
+      const v = s.votes[cue.id];
+      if (v && v.status === 'closed') return [cue.options[v.result].goto];
+      return Array.from(new Set(cue.options.map((o) => o.goto)));
+    }
+    const next = this.linearNext(cue);
+    return next ? [next] : [];
+  }
+
   record(type, data) {
     const ev = Object.assign({ seq: this.state.seq + 1, t: this.now(), type }, data);
     const nextState = applyEvent(this.state, ev);

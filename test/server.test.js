@@ -174,3 +174,18 @@ test('Servidor: en reiniciar es recupera l\'estat del diari', async () => {
     fs.rmSync(t.root, { recursive: true, force: true });
   }
 });
+
+test('Servidor: el projector rep la llista de vídeos a precarregar', async () => {
+  const t = tmpShow();
+  const srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet });
+  try {
+    const screen = await connect(srv.port, 'role=screen');
+    await screen.until((s) => s.preload.length === 1 && s.preload[0] === '/show/media/v.mp4');
+    await srv.engine.dispatch({ name: 'jump', cueId: 'v1' });
+    const s = await screen.until((st) => st.cue && st.cue.id === 'v1');
+    assert.deepStrictEqual(s.preload, ['/show/media/v.mp4'], 'les dues branques són el mateix vídeo');
+  } finally {
+    await srv.close();
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});

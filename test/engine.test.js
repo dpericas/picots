@@ -272,3 +272,20 @@ test('El temporitzador tanca la votació automàticament', async () => {
   assert.strictEqual(e.state.votes.v1.reason, 'no_votes');
   e.dispose();
 });
+
+test('Precàrrega: cues que poden venir després de l\'actual', () => {
+  const e = makeEngine();
+  claimAll(e);
+  assert.deepStrictEqual(e.upcomingCueIds(), ['intro'], 'abans de començar, la primera');
+  ok(e, { name: 'go' });
+  assert.deepStrictEqual(e.upcomingCueIds(), ['v1']);
+  ok(e, { name: 'go' });
+  assert.deepStrictEqual(e.upcomingCueIds(), ['bosc', 'castell'], 'votació pendent: totes les branques');
+  ok(e, { name: 'vote.open' });
+  ok(e, { name: 'ballot', deviceId: 'da', option: 1 });
+  assert.deepStrictEqual(e.upcomingCueIds(), ['bosc', 'castell'], 'votació oberta: totes les branques');
+  ok(e, { name: 'vote.close' });
+  assert.deepStrictEqual(e.upcomingCueIds(), ['castell'], 'votació decidida: només la guanyadora');
+  ok(e, { name: 'jump', cueId: 'fi' });
+  assert.deepStrictEqual(e.upcomingCueIds(), []);
+});

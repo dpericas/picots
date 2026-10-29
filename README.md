@@ -52,6 +52,24 @@ errors, es manté la versió anterior i el panell mostra què falla.
 Format de vídeo recomanat: MP4 H.264 + AAC, 1920x1080 o 1280x720,
 amb `-movflags +faststart`.
 
+### Pas sense talls entre vídeos
+
+El projector té sempre carregats els vídeos que poden venir després (la cue següent,
+o totes les branques d'una votació mentre no està decidida). En canviar de cue, el vídeo
+nou entra a sobre de l'anterior i l'anterior no es retira fins que el nou ja pinta, de
+manera que mai es veu negre: com a molt, l'últim fotograma uns mil·lisegons.
+Amb `fos: 0.8` en una cue de vídeo, hi entra amb un fos encadenat (imatge i so).
+Els salts a una cue no prevista també són sense negre, però poden congelar la imatge
+un moment mentre el vídeo carrega.
+
+Comprovació automàtica (captura el projector ~60 cops per segon, sense so):
+
+```bash
+npx electron scripts/check-transitions.js --scenario=auto     # vídeo → vídeo amb fos
+npx electron scripts/check-transitions.js --scenario=jump     # salts i ENRERE
+npx electron scripts/check-transitions.js --scenario=layers   # espera/fotos ↔ vídeo
+```
+
 ## Panell de control
 
 | Tecla | Acció |

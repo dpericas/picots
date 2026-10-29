@@ -2,7 +2,8 @@
 # Després d'editar-lo, clica «Recarregar guió» al panell (no cal reiniciar).
 #
 # Tipus de cue:
-#   video        fitxer, auto (true = passa sol a la següent en acabar)
+#   video        fitxer, auto (true = passa sol a la següent en acabar),
+#                fos (segons de fos encadenat en entrar; 0 = tall net, per defecte)
 #   diapositives carpeta i/o imatges, segons (per foto), musica
 #   votacio      pregunta, opcions [{text, va_a}], temps (s, 0 = sense límit),
 #                empat (aleatori | primera | operador), per_defecte (opció si ningú vota)
@@ -52,13 +53,22 @@ cues:
     tipus: video
     titol: "Capítol 2A – El bosc"
     fitxer: media/video/cap2a.mp4
-    seguent: records
+    auto: true
+    seguent: cap3
 
   - id: cap2b
     tipus: video
     titol: "Capítol 2B – El castell"
     fitxer: media/video/cap2b.mp4
-    seguent: records
+    auto: true
+    seguent: cap3
+
+  - id: cap3
+    tipus: video
+    titol: "Capítol 3 – El tresor"
+    fitxer: media/video/cap3.mp4
+    fos: 0.8
+    notes: "Entra amb fos encadenat des del capítol 2."
 
   - id: records
     tipus: diapositives

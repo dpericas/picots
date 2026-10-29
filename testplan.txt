@@ -1,7 +1,7 @@
-PLA DE PROVES – Gala Manager (cicle 1: esquelet)
+PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls)
 ================================================
 
-Proves automàtiques: `npm test` (23 tests: motor, guió i servidor). Aquest pla cobreix
+Proves automàtiques: `npm test` (25 tests: motor, guió i servidor). Aquest pla cobreix
 el que els tests no poden verificar (pantalles reals, xarxa, Windows) i, per a cada
 àrea automatitzada, només la prova manual mínima que la confirma en condicions reals.
 
@@ -12,7 +12,7 @@ Purpose: Verificar la lògica del motor (GO/ENRERE/salts, votacions, empats, mà
          protegides, permisos per rol, recàrrega del guió, nova sessió).
 Method:  1. npm install
          2. npm test
-Expected Result: "# pass 23" i "# fail 0".
+Expected Result: "# pass 25" i "# fail 0".
 
 ------------------------------------------------------------------------------
 T02 – Arrencada a Windows amb dues pantalles
@@ -115,3 +115,24 @@ Method:  1. Des d'un mòbil, obrir http://<ip>:8080/control.
          2. Definir xarxa.pin_control: "4321", recarregar l'app i obrir /control?pin=4321.
 Expected Result: (1) El panell surt "Desconnectat" (connexió rebutjada, apareix al registre).
          (2) Amb el PIN, el panell funciona des de la tauleta.
+
+------------------------------------------------------------------------------
+T13 – Pas sense talls entre cues (automàtic, sense so)
+Purpose: Garantir que cap canvi de cue mostra negre: vídeo→vídeo precarregat amb fos,
+         salts i ENRERE a vídeos no precarregats, i espera/fotos ↔ vídeo.
+Method:  1. npm run sample-media
+         2. Per a cada escenari (auto, jump, layers), 5 vegades:
+            npx electron scripts/check-transitions.js --scenario=<escenari>
+Expected Result: "blackFrames":[] i codi de sortida 0 a totes les execucions.
+
+------------------------------------------------------------------------------
+T14 – Pas sense talls amb els vídeos reals i el projector real
+Purpose: Confirmar a Windows, amb vídeos 1080p reals i el projector de la sala, que els
+         canvis no tenen negre ni salts de so, i que el fos encadenat es veu bé.
+Method:  1. Posar els vídeos definitius al guió (un parell amb fos: 0.8).
+         2. Recórrer l'espectacle sencer amb GO, incloent-hi les dues branques de cada
+            votació (fer servir ENRERE i "Reiniciar votació").
+         3. Fer 3 salts amb doble clic a vídeos llunyans de l'escaleta.
+Expected Result: Cap fotograma negre entre vídeos. Als talls nets, el so del vídeo anterior
+         s'atura en començar el nou; als fosos, el so es creua. Als salts, com a molt una
+         congelació breu (< 0,5 s) de l'última imatge.

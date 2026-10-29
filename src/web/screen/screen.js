@@ -4,7 +4,6 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const el = Gala.el;
-  const video = $('video');
   const music = $('music');
 
   let state = null;
@@ -12,12 +11,39 @@
   let slideTimer = null;
   let slideIndex = 0;
   let lastPositionSent = 0;
+  const LAYER_HIDE_DELAY_MS = 80;
+  // Capa que es veu. En entrar a un vídeo, la capa anterior es manté fins que
+  // el vídeo ja es veu (onSwap), per no mostrar negre mentre es carrega.
+  let visualType = 'welcome';
   let renderedVoters = new Set();
 
   const socket = new Gala.GalaSocket('screen', {
     onState: (s) => { state = s; render(); },
     onConnection: (ok) => $('offline').classList.toggle('hidden', ok),
   });
+
+  const deck = new VideoDeck($('videos'), {
+    onEnded: () => {
+      if (state && state.cue) socket.cmd({ name: 'video.ended', cueId: state.cue.id, enterSeq: state.enterSeq });
+    },
+    onTime: (t) => {
+      const now = Date.now();
+      if (now - lastPositionSent < 1000 || !state || !state.cue) return;
+      lastPositionSent = now;
+      socket.notify({ name: 'video.position', cueId: state.cue.id, enterSeq: state.enterSeq, t });
+    },
+    onError: (src, msg) => reportMediaError(src, msg),
+    onMutedFallback: () => show('sound-hint', true),
+    onSwap: () => {
+      // Marge perquè el compositor tingui el fotograma a la pantalla abans de treure la capa.
+      setTimeout(() => {
+        if (!state || !state.cue || state.cue.type !== 'video') return;
+        visualType = 'video';
+        render();
+      }, LAYER_HIDE_DELAY_MS);
+    },
+  });
+  window.galaDeck = deck; // per a diagnòstic des de les eines de desenvolupament
 
   function show(id, visible) {
     $(id).classList.toggle('hidden', !visible);
@@ -27,7 +53,7 @@
     socket.cmd({ name: 'media.error', cueId: state && state.cue && state.cue.id, src, msg });
   }
 
-  // Reprodueix; si el navegador bloqueja el so (fora d'Electron), prova sense so.
+  // Música: si el navegador bloqueja el so (fora d'Electron), prova sense so.
   function safePlay(media) {
     const p = media.play();
     if (p && p.catch) {
@@ -41,33 +67,13 @@
     }
   }
   $('sound-hint').addEventListener('click', () => {
-    video.muted = false;
+    deck.setMuted(false);
     music.muted = false;
     show('sound-hint', false);
-  });
-
-  video.addEventListener('ended', () => {
-    if (state && state.cue) socket.cmd({ name: 'video.ended', cueId: state.cue.id, enterSeq: state.enterSeq });
-  });
-  video.addEventListener('timeupdate', () => {
-    const now = Date.now();
-    if (now - lastPositionSent < 1000 || !state || !state.cue) return;
-    lastPositionSent = now;
-    socket.notify({ name: 'video.position', cueId: state.cue.id, enterSeq: state.enterSeq, t: video.currentTime });
-  });
-  video.addEventListener('error', () => {
-    const err = video.error;
-    if (video.getAttribute('src')) reportMediaError(video.getAttribute('src'), err ? 'codi ' + err.code + ' ' + (err.message || '') : 'error');
   });
   music.addEventListener('error', () => {
     if (music.getAttribute('src')) reportMediaError(music.getAttribute('src'), 'no es pot reproduir la música');
   });
-
-  function stopVideo() {
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-  }
 
   function setMusic(src) {
     if (!src) {
@@ -116,21 +122,17 @@
     renderedVoters = new Set();
     $('vote-voters').textContent = '';
     if (!cue) {
-      stopVideo();
+      deck.release(0);
       setMusic(null);
       return;
     }
     if (cue.type === 'video') {
-      video.setAttribute('src', cue.src);
       const r = state.resume;
-      if (r && r.cueId === cue.id && r.enterSeq === state.enterSeq) {
-        video.addEventListener('loadedmetadata', function seek() {
-          video.removeEventListener('loadedmetadata', seek);
-          video.currentTime = r.t;
-        });
-      }
+      const resume = r && r.cueId === cue.id && r.enterSeq === state.enterSeq;
+      deck.play(cue.src, { startAt: resume ? r.t : 0, fade: cue.fade, paused: state.paused });
     } else {
-      stopVideo();
+      // L'últim fotograma queda sota la capa nova mentre aquesta apareix (fos de les fotos).
+      deck.release(1000);
     }
     if (cue.type === 'slides') startSlides(cue);
     setMusic(cue.type === 'slides' || cue.type === 'hold' ? cue.music : null);
@@ -193,8 +195,6 @@
       $('welcome-qr').src = '/api/qr.svg?text=' + encodeURIComponent(s.joinUrl);
       $('welcome-url').textContent = s.joinUrl;
     }
-    show('welcome', !s.started);
-
     const key = s.cue ? s.cue.id + ':' + s.enterSeq : null;
     if (key !== cueKey) {
       cueKey = key;
@@ -202,17 +202,19 @@
     }
     const cue = s.cue;
     const type = cue ? cue.type : null;
-    show('slides', type === 'slides');
-    show('hold', type === 'hold');
-    show('vote', type === 'vote');
+    if (!s.started) visualType = 'welcome';
+    else if (type !== 'video') visualType = type;
+    show('welcome', visualType === 'welcome');
+    show('slides', visualType === 'slides');
+    show('hold', visualType === 'hold');
+    show('vote', visualType === 'vote');
     if (type === 'vote' && s.vote) renderVote(cue, s.vote);
+
+    deck.preload(s.preload);
 
     // Pausa global: afecta vídeo, música i diapositives.
     // Les capes de negre/espera només tapen la imatge; el so el controla la pausa.
-    if (type === 'video') {
-      if (s.paused) video.pause();
-      else if (video.paused && !video.ended) safePlay(video);
-    }
+    if (type === 'video') deck.setPaused(s.paused);
     if (music.getAttribute('src')) {
       if (s.paused) music.pause();
       else if (music.paused) safePlay(music);

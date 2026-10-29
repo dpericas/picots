@@ -15,6 +15,7 @@ function cuePublic(cue) {
   if (cue.type === 'video') {
     out.src = mediaUrl(cue.file);
     out.auto = cue.auto;
+    out.fade = cue.fade;
   } else if (cue.type === 'slides') {
     out.images = cue.images.map(mediaUrl);
     out.interval = cue.interval;
@@ -60,8 +61,17 @@ function screenView(engine, extra) {
     overlay: s.overlay,
     vote: voteSummary(engine, cue),
     resume: engine.resume,
+    preload: preloadSources(engine),
     joinUrl: extra.joinUrl,
   };
+}
+
+// Vídeos que el projector ha de tenir carregats per poder-hi passar sense talls.
+function preloadSources(engine) {
+  return engine.upcomingCueIds()
+    .map((id) => engine.cue(id))
+    .filter((c) => c && c.type === 'video')
+    .map((c) => mediaUrl(c.file));
 }
 
 function playView(engine, deviceId) {
