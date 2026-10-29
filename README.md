@@ -44,7 +44,8 @@ Opcions: `--show=<carpeta>` i `--data=<carpeta>`.
 
 ## El guió (`show/show.yaml`)
 
-Cada pas de l'espectacle és una **cue**: `video`, `diapositives`, `votacio`, `espera` o `entrada`.
+Cada pas de l'espectacle és una **cue**: `video`, `diapositives`, `votacio`, `espera`, `entrada`,
+`questionari`, `repte`, `mencions` o `mur`.
 Les votacions defineixen a quina cue va cada opció (`va_a`). Els detalls i un exemple
 complet són al mateix `show.yaml`. Després d'editar-lo, clica **Recarregar guió**: si té
 errors, es manté la versió anterior i el panell mostra què falla.
@@ -70,6 +71,42 @@ El panell marca amb 🎬 els nens que tenen vídeo.
 
 Durada: amb 23 nens i la franja de 20 minuts del planning (17:05–17:25) hi ha uns 50 s per nen,
 comptant el temps de dir el nom i caminar. Recomanació: vídeos d'entrada de 25–35 s.
+
+### Qüestionari
+
+Preguntes tipus Kahoot sobre records de l'escola (`questionari`). Cada pregunta té 2–4 opcions,
+la `correcta` (lletra A–D), un `temps` i opcionalment una `imatge`. Amb GO, cada pregunta passa
+per tres passos: **es llegeix** (a la pantalla, sense poder respondre) → **resposta oberta**
+(compte enrere; al mòbil, botons de colors amb forma ▲◆●■) → **solució** (la correcta destacada,
+quants han triat cada opció i la classificació provisional). Al final, **podi**.
+Una resposta correcta val de 500 a 1000 punts segons la rapidesa; cada nen només pot respondre
+un cop. Si responen tots abans del temps, la solució surt sola (`tancar_quan_tots`).
+`classificacio: 0` amaga els punts de la pantalla (cada nen només veu al mòbil si l'ha encertada).
+Plans B al panell: **+15 s** i **Repetir pregunta** (esborra les respostes d'aquella pregunta).
+
+### Repte col·lectiu
+
+Un repte de tota la sala que desbloqueja una escena (`repte`). Modalitat `tocs`: tots toquen
+el botó gran del mòbil i el comptador comú ha d'arribar a l'`objectiu` abans del `temps`.
+Modalitat `tots`: cal que premin «Sóc a punt!» tots els nens que tenen mòbil. Si el superen,
+GO va a `si_exit`; si no, a `si_no` (o a la cue de sota). Al panell: començar, aturar, +10 s,
+reiniciar, i **Superat / No superat** a mà (pla B sense mòbils: aplaudiments).
+Els tocs s'agrupen al mòbil i al servidor, i es desen al diari cada segon (en una caiguda es
+perd com a molt l'últim segon). Referència: 23 nens a ~6 tocs/s fan uns 140 tocs/s.
+
+### Mencions (diplomes)
+
+`mencions` funciona com l'entrada triomfal (GO nen a nen i mosaic final) però en daurat, amb
+la menció de cada nen a sota del nom. La menció es posa a `mencio` de cada participant o al
+mapa `mencions: {id: text}` de la cue (té preferència). El panell avisa dels nens sense menció.
+
+### Mur de missatges
+
+`mur`: els nens envien des del mòbil un missatge curt (fins a 100 caràcters, amb emojis) o un
+dibuix fet amb el dit. Amb `moderacio: true` (per defecte) cada missatge espera al panell fins
+que el tècnic l'**aprova**; només els aprovats surten a la pantalla (els 8 més recents) i es
+poden tornar a treure. Límit per nen: `maxim_per_nen` (3) i un cada 3 s. Els dibuixos no
+aprovats només es poden veure des del portàtil del tècnic.
 
 ### Pas sense talls entre vídeos
 
@@ -117,6 +154,8 @@ Si tots dos premen GO alhora, només s'avança una vegada.
 ## Plans B inclosos
 
 - **Vot a mà alçada**: el botó «Mà alçada» de cada opció decideix el resultat sense mòbils.
+- **Repte sense mòbils**: «Superat» / «No superat» al panell decideixen la branca.
+- **Qüestionari**: +15 s i repetir una pregunta; GO tanca la pregunta en qualsevol moment.
 - **Forçar, reiniciar o allargar** una votació, i regla d'empat configurable.
 - **Sense vots**: s'aplica `per_defecte`.
 - **Recuperació**: cada acció es desa (amb fsync) a `dades/journal.jsonl`. Si l'app es tanca,

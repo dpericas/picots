@@ -16,6 +16,16 @@
   // el vídeo ja es veu (onSwap), per no mostrar negre mentre es carrega.
   let visualType = 'welcome';
   let renderedVoters = new Set();
+  const SHAPES = ['▲', '◆', '●', '■'];
+  const WALL_SHOWN = 8;
+  let quizKey = null;
+  let quizVoters = new Set();
+  let chPlayers = new Set();
+  let chLastTotal = 0;
+  let chResultShown = null;
+  let wallShown = new Set();
+  // Les mencions fan servir la capa de l'entrada triomfal.
+  const LAYER_OF = { awards: 'parade' };
 
   const socket = new Gala.GalaSocket('screen', {
     onState: (s) => { state = s; render(); },
@@ -25,7 +35,7 @@
   const deck = new VideoDeck($('videos'), {
     onEnded: () => {
       if (!state || !state.cue) return;
-      if (state.cue.type === 'parade') {
+      if (state.cue.type === 'parade' || state.cue.type === 'awards') {
         // Vídeo d'entrada d'un nen acabat: surt la seva targeta (es queda fins al GO).
         parade.videoEnded();
         deck.release(400);
@@ -46,7 +56,7 @@
       // Marge perquè el compositor tingui el fotograma a la pantalla abans de treure la capa.
       setTimeout(() => {
         if (!state || !state.cue) return;
-        if (state.cue.type === 'parade') parade.showVideo();
+        if (state.cue.type === 'parade' || state.cue.type === 'awards') parade.showVideo();
         else if (state.cue.type === 'video') visualType = 'video';
         else return;
         render();
@@ -133,6 +143,13 @@
     stopSlides();
     renderedVoters = new Set();
     $('vote-voters').textContent = '';
+    quizKey = null;
+    chPlayers = new Set();
+    chLastTotal = 0;
+    chResultShown = null;
+    $('ch-players').textContent = '';
+    wallShown = new Set();
+    $('wall-grid').textContent = '';
     if (!cue) {
       deck.release(0);
       setMusic(null);
@@ -147,8 +164,8 @@
       deck.release(1000);
     }
     if (cue.type === 'slides') startSlides(cue);
-    if (cue.type === 'parade') parade.enter(cue);
-    setMusic(['slides', 'hold', 'parade'].includes(cue.type) ? cue.music : null);
+    if (cue.type === 'parade' || cue.type === 'awards') parade.enter(cue);
+    setMusic(['slides', 'hold', 'parade', 'awards', 'quiz', 'challenge', 'wall'].includes(cue.type) ? cue.music : null);
     if (cue.type === 'hold') $('hold-text').textContent = cue.text || '';
   }
 
@@ -189,7 +206,161 @@
     updateTimer();
   }
 
+  function avatarChip(p, cls) {
+    const chip = el('div', { class: cls || 'mini-avatar', title: p.name }, p.avatar ? [] : [p.name.slice(0, 2)]);
+    if (p.avatar) chip.style.backgroundImage = 'url("' + p.avatar + '")';
+    return chip;
+  }
+
+  // --- Qüestionari ---
+  function renderQuiz(cue, q) {
+    const playing = q.kind === 'question' || q.kind === 'open' || q.kind === 'reveal';
+    show('quiz-intro', q.kind === 'intro');
+    show('quiz-play', playing);
+    show('quiz-ranking', q.kind === 'ranking');
+    if (q.kind === 'intro') {
+      $('quiz-intro-title').textContent = cue.title || 'Qüestionari';
+      $('quiz-intro-text').textContent = cue.text || '';
+    }
+    const key = q.cueId + ':' + q.q + ':' + q.kind;
+    const changed = key !== quizKey;
+    if (playing) renderQuizQuestion(q, changed && (quizKey || '').split(':')[1] !== String(q.q));
+    if (q.kind === 'ranking' && changed) renderQuizRanking(cue, q);
+    quizKey = key;
+  }
+
+  function renderQuizQuestion(q, newQuestion) {
+    const reveal = q.kind === 'reveal';
+    $('quiz-num').textContent = 'Pregunta ' + (q.q + 1) + ' de ' + q.total;
+    $('quiz-answered').textContent = q.kind === 'question' ? ''
+      : q.answeredBy.length + ' de ' + q.expected + ' han respost';
+    $('quiz-question').textContent = q.question.text;
+    const img = $('quiz-image');
+    const board = $('quiz-board');
+    const showBoard = reveal && q.top && q.top.length > 0;
+    show('quiz-image', !!q.question.image && !showBoard);
+    if (q.question.image && img.getAttribute('src') !== q.question.image) img.src = q.question.image;
+    show('quiz-board', showBoard);
+    board.textContent = '';
+    if (showBoard) {
+      q.top.forEach((r, i) => {
+        const li = el('li', {}, [
+          el('span', { class: 'rank', text: r.rank + '.' }), avatarChip(r),
+          el('span', { class: 'who', text: r.name }), el('span', { class: 'pts', text: String(r.points) }),
+        ]);
+        li.style.animationDelay = (i * 90) + 'ms';
+        board.append(li);
+      });
+    }
+    const box = $('quiz-options');
+    if (newQuestion || box.childElementCount !== q.question.options.length) {
+      box.textContent = '';
+      q.question.options.forEach((text, i) => {
+        box.append(el('div', { class: 'qopt opt-' + (i % 4) }, [
+          el('span', { class: 'shape', text: SHAPES[i % 4] }), el('span', { text: text }), el('span', { class: 'n' }),
+        ]));
+      });
+    }
+    Array.from(box.children).forEach((node, i) => {
+      node.classList.toggle('right', reveal && q.correct === i);
+      node.classList.toggle('wrong', reveal && q.correct !== i);
+      node.querySelector('.n').textContent = reveal && q.counts ? String(q.counts[i]) : '';
+    });
+    if (newQuestion) {
+      quizVoters = new Set();
+      $('quiz-voters').textContent = '';
+    }
+    (q.answeredBy || []).forEach((p) => {
+      if (quizVoters.has(p.id)) return;
+      quizVoters.add(p.id);
+      $('quiz-voters').append(avatarChip(p, 'voter'));
+    });
+  }
+
+  function renderQuizRanking(cue, q) {
+    const top = q.top || [];
+    $('quiz-ranking-title').textContent = top.length ? 'Classificació' : 'Molt bé a tots! 👏';
+    const podium = $('quiz-podium');
+    podium.textContent = '';
+    // Ordre visual: 2n, 1r, 3r.
+    [1, 0, 2].forEach((i) => {
+      const r = top[i];
+      if (!r) return;
+      const pic = el('div', { class: 'pic' }, r.avatar ? [] : [r.name.slice(0, 2)]);
+      if (r.avatar) pic.style.backgroundImage = 'url("' + r.avatar + '")';
+      const node = el('div', { class: 'podium p' + (i + 1) }, [
+        pic, el('div', { class: 'name', text: r.name }), el('div', { class: 'pts', text: r.points + ' punts' }),
+        el('div', { class: 'block', text: String(r.rank) }),
+      ]);
+      // Primer surt el 3r, després el 2n i, per acabar, el 1r.
+      node.style.animationDelay = ({ 2: 0, 1: 700, 0: 1400 })[i] + 'ms';
+      podium.append(node);
+    });
+    const rest = $('quiz-rest');
+    rest.textContent = '';
+    top.slice(3).forEach((r) => rest.append(el('li', {}, [avatarChip(r), r.rank + '. ' + r.name + ' – ' + r.points])));
+    setTimeout(() => Parade.burst($('quiz').querySelector('.burst'), 40), top.length ? 1600 : 0);
+  }
+
+  // --- Repte col·lectiu ---
+  function renderChallenge(cue, c) {
+    $('ch-text').textContent = cue.text || cue.title || 'Repte!';
+    $('ch-count').textContent = c.status === 'pending' ? 'Prepareu-vos!' : c.total + ' / ' + c.goal;
+    $('ch-bar').style.width = Math.min(100, (c.total / c.goal) * 100) + '%';
+    const lock = $('ch-lock');
+    lock.textContent = c.status === 'closed' && c.result === 'success' ? '🔓' : '🔒';
+    if (c.total > chLastTotal && c.status === 'open') {
+      lock.classList.remove('shake');
+      void lock.offsetWidth;
+      lock.classList.add('shake');
+    }
+    chLastTotal = c.total;
+    c.players.forEach((p) => {
+      if (chPlayers.has(p.id)) return;
+      chPlayers.add(p.id);
+      $('ch-players').append(avatarChip(p, 'voter'));
+    });
+    const result = $('ch-result');
+    const shown = c.status === 'closed' ? c.result : null;
+    if (shown !== chResultShown) {
+      chResultShown = shown;
+      result.className = shown ? (shown === 'success' ? '' : 'fail') : 'hidden';
+      result.textContent = shown === 'success' ? '🎉 REPTE SUPERAT! 🎉' : 'Gairebé! 💪 Ho heu fet molt bé';
+      if (shown === 'success') Parade.burst($('challenge').querySelector('.burst'), 48);
+    }
+  }
+
+  // --- Mur de missatges: els darrers, el més nou primer ---
+  function renderWall(cue, w) {
+    $('wall-text').textContent = cue.text || cue.title || 'Mur de missatges';
+    const qr = '/api/qr.svg?text=' + encodeURIComponent(state.joinUrl);
+    if ($('wall-qr').getAttribute('src') !== qr) $('wall-qr').src = qr;
+    const posts = w.posts.slice(-WALL_SHOWN).reverse();
+    show('wall-empty', posts.length === 0);
+    const grid = $('wall-grid');
+    const ids = posts.map((m) => m.id).join(',');
+    if (grid.dataset.ids === ids) return;
+    grid.dataset.ids = ids;
+    grid.textContent = '';
+    posts.forEach((m) => {
+      const card = el('div', { class: 'wall-card' }, [
+        el('div', { class: 'who' }, [avatarChip(m.author), m.author.name]),
+        m.drawing ? el('img', { src: m.drawing, alt: 'Dibuix de ' + m.author.name }) : el('div', { class: 'msg', text: m.text }),
+      ]);
+      // Només s'anima l'entrada dels missatges nous.
+      if (wallShown.has(m.id)) card.style.animation = 'none';
+      wallShown.add(m.id);
+      grid.append(card);
+    });
+  }
+
   function updateTimer() {
+    const q = state && state.quiz;
+    $('quiz-timer').textContent = q && q.kind === 'open' && q.endsAt
+      ? Math.max(0, Math.ceil((q.endsAt - socket.serverNow()) / 1000)) : '';
+    const c = state && state.challenge;
+    $('ch-timer').textContent = c && c.status === 'open' && c.endsAt
+      ? Math.max(0, Math.ceil((c.endsAt - socket.serverNow()) / 1000)) : '';
     const t = $('vote-timer');
     const vote = state && state.vote;
     if (!vote || vote.status !== 'open' || !vote.endsAt) {
@@ -216,13 +387,9 @@
     const cue = s.cue;
     const type = cue ? cue.type : null;
     if (!s.started) visualType = 'welcome';
-    else if (type !== 'video') visualType = type;
-    show('welcome', visualType === 'welcome');
-    show('slides', visualType === 'slides');
-    show('hold', visualType === 'hold');
-    show('vote', visualType === 'vote');
-    show('parade', visualType === 'parade');
-    if (type === 'parade') {
+    else if (type !== 'video') visualType = LAYER_OF[type] || type;
+    ['welcome', 'slides', 'hold', 'vote', 'parade', 'quiz', 'challenge', 'wall'].forEach((id) => show(id, visualType === id));
+    if (type === 'parade' || type === 'awards') {
       const src = parade.setStep(s.step);
       if (src) {
         const r = s.resume;
@@ -233,6 +400,9 @@
       }
     }
     if (type === 'vote' && s.vote) renderVote(cue, s.vote);
+    if (type === 'quiz' && s.quiz) renderQuiz(cue, s.quiz);
+    if (type === 'challenge' && s.challenge) renderChallenge(cue, s.challenge);
+    if (type === 'wall' && s.wall) renderWall(cue, s.wall);
 
     deck.preload(s.preload);
 

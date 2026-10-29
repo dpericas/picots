@@ -57,3 +57,7 @@ button:disabled { opacity: 0.35; }
 #help-options { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 #toast { position: fixed; left: 14px; right: 14px; bottom: 18px; padding: 12px; border-radius: 10px; background: var(--bad); font-weight: 700; text-align: center; }
 #toast.info { background: #2b6cd4; }
+#activity { background: var(--panel); border-radius: 12px; padding: 10px 12px; }
+#activity-main { font-size: 18px; font-weight: 700; }
+#activity-detail { color: var(--muted); margin-top: 4px; white-space: pre-wrap; }
+#activity-detail .correct { color: var(--go); font-weight: 700; }

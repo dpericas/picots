@@ -5,6 +5,8 @@
 // Si el nen té vídeo d'entrada, el seu pas té dues fases: primer el vídeo (el
 // reprodueix el VideoDeck de screen.js, a sota d'aquesta capa, que es torna
 // transparent i hi posa el nom a sobre) i, quan s'acaba, la targeta amb la foto.
+//
+// Les mencions fan servir la mateixa capa: la targeta afegeix el text de la menció.
 
 (function () {
   const el = Gala.el;
@@ -49,6 +51,7 @@
     this.cue = cue;
     this.step = null;
     this.pendingVideo = null;
+    this.root.classList.toggle('awards', cue.type === 'awards');
     this.leaveVideoMode();
     this.stage.textContent = '';
     this.burst.textContent = '';
@@ -157,6 +160,7 @@
       const card = el('div', { class: 'card' }, [
         el('div', { class: 'card-frame' }, [this.photo(person, 'card-photo')]),
         el('div', { class: 'card-name', text: person.name }),
+        person.mention ? el('div', { class: 'card-mention', text: person.mention }) : null,
       ]);
       this.stage.append(card);
       if (forward) {
@@ -169,10 +173,16 @@
   };
 
   Parade.prototype.fireBurst = function () {
-    this.burst.textContent = '';
+    Parade.burst(this.burst);
+  };
+
+  // Esclat de confeti dins d'un contenidor (també el fan servir el repte i el qüestionari).
+  Parade.burst = function (container, pieces) {
+    container.textContent = '';
     const colors = ['#ffcc33', '#e84a5f', '#2a9df4', '#3cb371', '#ffffff', '#f39c12'];
-    for (let i = 0; i < BURST_PIECES; i++) {
-      const angle = (i / BURST_PIECES) * Math.PI * 2 + Math.random() * 0.4;
+    const count = pieces || BURST_PIECES;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
       const dist = 30 + Math.random() * 25; // en vmin
       const piece = el('span');
       piece.style.setProperty('--dx', (Math.cos(angle) * dist).toFixed(1) + 'vmin');
@@ -180,7 +190,7 @@
       piece.style.setProperty('--rot', Math.round(Math.random() * 720 - 360) + 'deg');
       piece.style.background = colors[i % colors.length];
       piece.style.animationDelay = Math.round(Math.random() * 120) + 'ms';
-      this.burst.append(piece);
+      container.append(piece);
     }
   };
 

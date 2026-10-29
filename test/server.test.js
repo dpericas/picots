@@ -234,3 +234,58 @@ test('Servidor: comandament del presentador (PIN, ordres permeses, bloqueig i av
     fs.rmSync(t.root, { recursive: true, force: true });
   }
 });
+
+test('Servidor: qüestionari, repte i mur des dels mòbils', async () => {
+  const t = tmpShow();
+  fs.writeFileSync(path.join(t.showDir, 'show.yaml'), SHOW + `
+  - id: q
+    tipus: questionari
+    preguntes: [{ pregunta: P, opcions: [x, y], correcta: B, temps: 30 }]
+  - { id: r, tipus: repte, objectiu: 25, temps: 30, si_exit: intro }
+  - { id: m, tipus: mur }
+`);
+  const srv = await startServer({ showDir: t.showDir, dataDir: t.dataDir, port: 0, host: '127.0.0.1', log: quiet });
+  try {
+    const control = await connect(srv.port, 'role=control');
+    const screen = await connect(srv.port, 'role=screen');
+    const phone = await connect(srv.port, 'role=play&device=dev1');
+    assert.ok((await phone.cmd({ name: 'claim', participantId: 'a' })).ok);
+
+    assert.ok((await control.cmd({ name: 'jump', cueId: 'q' })).ok);
+    assert.ok((await control.cmd({ name: 'step', step: 2 })).ok);
+    await phone.until((s) => s.quiz && s.quiz.kind === 'open');
+    assert.ok((await phone.cmd({ name: 'answer', option: 1 })).ok);
+    // L'únic nen amb mòbil ja ha respost: solució automàtica.
+    const sq = await screen.until((s) => s.quiz && s.quiz.kind === 'reveal');
+    assert.strictEqual(sq.quiz.correct, 1);
+    await phone.until((s) => s.quiz.myPoints > 0);
+
+    assert.ok((await control.cmd({ name: 'jump', cueId: 'r' })).ok);
+    assert.ok((await control.cmd({ name: 'go' })).ok);
+    await phone.until((s) => s.challenge && s.challenge.status === 'open');
+    phone.ws.send(JSON.stringify({ type: 'cmd', cmd: { name: 'tap', n: 10 } })); // com fa el mòbil (sense resposta)
+    await screen.until((s) => s.challenge && s.challenge.total === 10);
+    phone.ws.send(JSON.stringify({ type: 'cmd', cmd: { name: 'tap', n: 15 } }));
+    await screen.until((s) => s.challenge.status === 'closed' && s.challenge.result === 'success');
+    await control.until((s) => s.go.action === 'enter' && s.go.cueId === 'intro');
+
+    assert.ok((await control.cmd({ name: 'jump', cueId: 'm' })).ok);
+    const png = 'data:image/png;base64,' + Buffer.from('fake-png').toString('base64');
+    assert.ok((await phone.cmd({ name: 'wall.post', drawing: png })).ok);
+    const cs = await control.until((s) => s.wall && s.wall.posts.length === 1);
+    const post = cs.wall.posts[0];
+    assert.strictEqual(post.status, 'pending');
+    const img = await get(srv.port, post.drawing);
+    assert.strictEqual(img.status, 200);
+    assert.strictEqual(img.headers['content-type'], 'image/png');
+    assert.strictEqual(img.body, 'fake-png');
+    assert.strictEqual((await phone.cmd({ name: 'wall.moderate', id: post.id, status: 'approved' })).ok, false,
+      'un mòbil no pot moderar');
+    assert.ok((await control.cmd({ name: 'wall.moderate', id: post.id, status: 'approved' })).ok);
+    await screen.until((s) => s.wall && s.wall.posts.length === 1);
+    assert.strictEqual((await get(srv.port, '/api/mur/999')).status, 404);
+  } finally {
+    await srv.close();
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});

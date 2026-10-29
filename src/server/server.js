@@ -20,12 +20,16 @@ const { pickLanAddress, isLoopback } = require('./net');
 const WEB_DIR = path.join(__dirname, '..', 'web');
 const PAGES = { '/screen': 'screen', '/control': 'control', '/play': 'play', '/remote': 'remote' };
 const ROLE_COMMANDS = {
-  play: ['claim', 'ballot', 'release'],
+  play: ['claim', 'ballot', 'release', 'answer', 'tap', 'wall.post'],
   remote: ['go', 'back', 'remote.alert'],
   screen: ['video.ended', 'video.position', 'media.error'],
 };
 const POSITION_SAVE_MS = 2000;
 const HEARTBEAT_MS = 10000;
+// Durant un repte els tocs arriben molt seguits: s'envia l'estat com a molt cada LIVE_MS.
+const LIVE_MS = 150;
+// Events massa freqüents per escriure'ls al registre un a un.
+const QUIET_EVENTS = ['vote.ballot', 'quiz.answer', 'challenge.progress'];
 
 function readSecret(dataDir) {
   const file = path.join(dataDir, 'secret');
@@ -138,8 +142,16 @@ async function startServer(opts) {
   }
 
   engine.on('change', (ev) => {
-    if (ev && ev.type !== 'vote.ballot') log.info('Event ' + ev.seq + ': ' + ev.type + summarize(ev));
+    if (ev && !QUIET_EVENTS.includes(ev.type)) log.info('Event ' + ev.seq + ': ' + ev.type + summarize(ev));
     broadcast();
+  });
+  let liveTimer = null;
+  engine.on('live', () => {
+    if (liveTimer) return;
+    liveTimer = setTimeout(() => {
+      liveTimer = null;
+      broadcast();
+    }, LIVE_MS);
   });
 
   // Desa la posició del vídeo periòdicament per poder reprendre després d'una caiguda.
@@ -243,6 +255,7 @@ async function startServer(opts) {
       const file = safeResolve(showDir, p.slice('/show/'.length));
       return file ? serveFile(req, res, file, { cache: true }) : sendError(res, 404);
     }
+    if (p.startsWith('/api/mur/')) return serveDrawing(req, res, Number(p.slice('/api/mur/'.length)));
     if (p === '/api/qr.svg') {
       const text = url.searchParams.get('text') || joinUrl();
       try {
@@ -256,6 +269,18 @@ async function startServer(opts) {
     return sendError(res, 404, 'No trobat');
   }
 
+  // Dibuix del mur. Els no aprovats només es veuen des d'aquest ordinador.
+  function serveDrawing(req, res, id) {
+    const m = engine.state.wall.find((x) => x.id === id);
+    const data = m && engine.drawings.get(id);
+    if (!data) return sendError(res, 404);
+    if (m.status !== 'approved' && !isLoopback(req.socket.remoteAddress)) return sendError(res, 403);
+    const comma = data.indexOf(',');
+    const type = data.slice(5, data.indexOf(';'));
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'private, max-age=3600' });
+    return res.end(req.method === 'HEAD' ? undefined : Buffer.from(data.slice(comma + 1), 'base64'));
+  }
+
   const httpServer = http.createServer((req, res) => {
     handleHttp(req, res).catch((err) => {
       log.error('Error HTTP ' + req.url + ': ' + err.stack);
@@ -263,7 +288,7 @@ async function startServer(opts) {
     });
   });
 
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 64 * 1024 });
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 128 * 1024 });
   let nextClientId = 1;
 
   wss.on('connection', (ws, req) => {
@@ -337,6 +362,7 @@ async function startServer(opts) {
   async function close() {
     clearInterval(heartbeat);
     clearInterval(positionTimer);
+    clearTimeout(liveTimer);
     engine.dispose();
     for (const c of clients) c.ws.terminate();
     wss.close();
@@ -361,6 +387,11 @@ function summarize(ev) {
   if (ev.type === 'vote.force') return ' ' + ev.cueId + ' resultat=' + ev.result + ' (' + ev.source + ')';
   if (ev.type === 'overlay.set') return ' ' + ev.mode;
   if (ev.type === 'participant.claim') return ' ' + ev.participantId;
+  if (ev.type === 'cue.step') return ' ' + ev.cueId + ' pas ' + ev.step;
+  if (ev.type === 'challenge.close') return ' ' + ev.cueId + ' ' + ev.result + ' (' + ev.reason + ')';
+  if (ev.type === 'challenge.force') return ' ' + ev.cueId + ' ' + ev.result + ' (' + ev.source + ')';
+  if (ev.type === 'wall.post') return ' #' + ev.id + ' de ' + ev.participantId + (ev.drawing ? ' (dibuix)' : '');
+  if (ev.type === 'wall.moderate') return ' #' + ev.id + ' ' + ev.status;
   return '';
 }
 

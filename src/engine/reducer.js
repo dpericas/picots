@@ -6,7 +6,10 @@
 // Events que canvien "on som" de l'espectacle (no els vots ni la pausa).
 // navSeq permet rebutjar un GO pensat per a un estat que ja ha canviat
 // (p. ex. el tècnic i el presentador prement GO alhora).
-const NAV_EVENTS = ['cue.enter', 'cue.step', 'show.end', 'vote.open', 'vote.close', 'vote.force', 'vote.reset'];
+const NAV_EVENTS = [
+  'cue.enter', 'cue.step', 'show.end', 'vote.open', 'vote.close', 'vote.force', 'vote.reset',
+  'challenge.open', 'challenge.close', 'challenge.force', 'challenge.reset',
+];
 
 function initialState() {
   return {
@@ -16,12 +19,17 @@ function initialState() {
     ended: false,
     cueId: null,
     enterSeq: 0,
-    step: 0, // pas dins la cue actual (entrada triomfal)
+    step: 0, // pas dins la cue actual (entrada, mencions, qüestionari)
+    stepAt: null, // moment d'entrar al pas actual
+    stepEndsAt: null, // fi del compte enrere del pas (pregunta oberta)
     history: [],
     paused: false,
     overlay: 'none', // none | black | hold
     votes: {}, // cueId -> { status, endsAt, ballots, result, reason, tied, counts }
     claims: {}, // participantId -> deviceId
+    quiz: {}, // cueId -> { [pregunta]: { participantId: { option, ms } } }
+    challenges: {}, // cueId -> { status, endsAt, taps, result, reason }
+    wall: [], // missatges: { id, cueId, participantId, text, drawing, at, status }
   };
 }
 
@@ -36,12 +44,19 @@ function applyEvent(state, ev) {
       s.cueId = ev.cueId;
       s.enterSeq = ev.seq;
       s.step = 0;
+      s.stepAt = ev.t;
+      s.stepEndsAt = null;
       s.started = true;
       s.ended = false;
       s.paused = false;
       break;
     case 'cue.step':
       s.step = ev.step;
+      s.stepAt = ev.t;
+      s.stepEndsAt = ev.endsAt || null;
+      break;
+    case 'step.extend':
+      s.stepEndsAt = ev.endsAt;
       break;
     case 'show.end':
       s.ended = true;
@@ -86,6 +101,59 @@ function applyEvent(state, ev) {
     case 'vote.reset':
       delete s.votes[ev.cueId];
       break;
+    case 'quiz.answer': {
+      const quiz = s.quiz[ev.cueId] || (s.quiz[ev.cueId] = {});
+      const answers = quiz[ev.q] || (quiz[ev.q] = {});
+      answers[ev.participantId] = { option: ev.option, ms: ev.ms };
+      break;
+    }
+    case 'quiz.reset':
+      if (s.quiz[ev.cueId]) delete s.quiz[ev.cueId][ev.q];
+      break;
+    case 'challenge.open':
+      s.challenges[ev.cueId] = {
+        status: 'open', openedSeq: ev.seq, endsAt: ev.endsAt, taps: {}, result: null, reason: null,
+      };
+      break;
+    case 'challenge.progress':
+      Object.assign(s.challenges[ev.cueId].taps, ev.taps);
+      break;
+    case 'challenge.extend':
+      s.challenges[ev.cueId].endsAt = ev.endsAt;
+      break;
+    case 'challenge.close': {
+      const c = s.challenges[ev.cueId];
+      Object.assign(c.taps, ev.taps || {});
+      c.status = 'closed';
+      c.result = ev.result;
+      c.reason = ev.reason;
+      c.endsAt = null;
+      break;
+    }
+    case 'challenge.force': {
+      const c = s.challenges[ev.cueId] || { taps: {} };
+      c.status = 'closed';
+      c.result = ev.result;
+      c.reason = ev.source;
+      c.endsAt = null;
+      s.challenges[ev.cueId] = c;
+      break;
+    }
+    case 'challenge.reset':
+      delete s.challenges[ev.cueId];
+      break;
+    case 'wall.post':
+      s.wall.push({
+        id: ev.id, cueId: ev.cueId, participantId: ev.participantId, text: ev.text,
+        // El dibuix (pot ser gran) el guarda el motor a part; aquí només si n'hi ha.
+        drawing: !!ev.drawing, at: ev.t, status: ev.status,
+      });
+      break;
+    case 'wall.moderate': {
+      const m = s.wall.find((x) => x.id === ev.id);
+      if (m) m.status = ev.status;
+      break;
+    }
     case 'participant.claim':
       // Un dispositiu només pot representar un participant.
       for (const pid of Object.keys(s.claims)) {

@@ -4,6 +4,16 @@
 
 const { EventEmitter } = require('events');
 const { initialState, applyEvent, countBallots } = require('./reducer');
+const quiz = require('./quiz');
+
+// Marge per a respostes que arriben just quan s'acaba el temps (latència de la xarxa).
+const ANSWER_GRACE_MS = 800;
+const TAP_FLUSH_MS = 1000;
+const MAX_TAPS_PER_MSG = 20;
+const WALL_MAX_TEXT = 100;
+const WALL_MAX_DRAWING = 80000;
+const WALL_COOLDOWN_MS = 3000;
+const DRAWING_RE = /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/;
 
 class CommandError extends Error {}
 
@@ -26,12 +36,15 @@ class Engine extends EventEmitter {
     this.random = opts.random || Math.random;
     this.timersEnabled = opts.timers !== false;
     this.keyFor = opts.keyFor || null;
-    this.timer = null;
+    this.timers = [];
+    this.live = null; // tocs del repte en curs, abans de desar-los al diari
+    this.drawings = new Map(); // id del missatge -> dibuix (data URL)
     this.state = initialState();
     const events = this.journal.readAll();
     for (const ev of events) {
       try {
         this.state = applyEvent(this.state, ev);
+        this.absorb(ev);
       } catch (err) {
         this.emit('warning', 'Event ' + ev.seq + ' no aplicable en recuperar: ' + err.message);
       }
@@ -45,8 +58,17 @@ class Engine extends EventEmitter {
   }
 
   dispose() {
-    clearTimeout(this.timer);
-    this.timer = null;
+    this.clearTimers();
+  }
+
+  clearTimers() {
+    this.timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
+    this.timers = [];
+  }
+
+  // Dades dels events que no formen part de l'estat clonat.
+  absorb(ev) {
+    if (ev.type === 'wall.post' && ev.drawing) this.drawings.set(ev.id, ev.drawing);
   }
 
   cue(id) {
@@ -64,12 +86,16 @@ class Engine extends EventEmitter {
     return i >= 0 && i + 1 < this.show.cues.length ? this.show.cues[i + 1].id : null;
   }
 
-  // Nombre de passos d'una cue (0 = no en té). Entrada: inici + un per nen + mosaic.
+  // Nombre de passos d'una cue (0 = no en té). Entrada i mencions: inici + un per nen + final.
   stepCount(cue) {
-    return cue && cue.type === 'parade' ? cue.people.length + 2 : 0;
+    if (!cue) return 0;
+    if (cue.type === 'parade' || cue.type === 'awards') return cue.people.length + 2;
+    if (cue.type === 'quiz') return quiz.stepCount(cue);
+    return 0;
   }
 
   stepLabel(cue, step) {
+    if (cue.type === 'quiz') return quiz.stepLabel(cue, step);
     if (step === 0) return 'Inici';
     if (step > cue.people.length) return 'Tots junts';
     const p = this.show.participants.find((x) => x.id === cue.people[step - 1]);
@@ -93,6 +119,13 @@ class Engine extends EventEmitter {
       if (v.status === 'tie') return { action: 'none', reason: 'Empat: tria el resultat' };
       return { action: 'enter', cueId: cue.options[v.result].goto };
     }
+    if (cue.type === 'challenge') {
+      const c = s.challenges[cue.id];
+      if (!c) return { action: 'challenge.open' };
+      if (c.status === 'open') return { action: 'challenge.close' };
+      const target = this.challengeTarget(cue, c.result);
+      return target ? { action: 'enter', cueId: target } : { action: 'end' };
+    }
     const next = this.linearNext(cue);
     return next ? { action: 'enter', cueId: next } : { action: 'end' };
   }
@@ -109,8 +142,19 @@ class Engine extends EventEmitter {
       if (v && v.status === 'closed') return [cue.options[v.result].goto];
       return Array.from(new Set(cue.options.map((o) => o.goto)));
     }
+    if (cue.type === 'challenge') {
+      const c = s.challenges[cue.id];
+      const targets = c && c.status === 'closed' ? [this.challengeTarget(cue, c.result)]
+        : [this.challengeTarget(cue, 'success'), this.challengeTarget(cue, 'fail')];
+      return Array.from(new Set(targets.filter(Boolean)));
+    }
     const next = this.linearNext(cue);
     return next ? [next] : [];
+  }
+
+  // Repte superat -> si_exit; no superat -> si_no o, si no n'hi ha, la cue de sota.
+  challengeTarget(cue, result) {
+    return result === 'success' ? cue.successGoto : (cue.failGoto || this.linearNext(cue));
   }
 
   record(type, data) {
@@ -118,6 +162,7 @@ class Engine extends EventEmitter {
     const nextState = applyEvent(this.state, ev);
     this.journal.append(ev);
     this.state = nextState;
+    this.absorb(ev);
     if (type === 'cue.enter' || type === 'cue.step') {
       this.resume = null;
       this.position = null;
@@ -135,6 +180,29 @@ class Engine extends EventEmitter {
       if (err instanceof CommandError) return { ok: false, error: err.message };
       throw err;
     }
+  }
+
+  participantOf(deviceId) {
+    const s = this.state;
+    const pid = Object.keys(s.claims).find((id) => s.claims[id] === deviceId);
+    if (!pid) throw new CommandError('Primer has de triar qui ets.');
+    return pid;
+  }
+
+  // Canvia de pas. Si el pas obre una pregunta del qüestionari, en fixa el final.
+  goToStep(cue, step) {
+    const data = { cueId: cue.id, step };
+    if (cue.type === 'quiz') {
+      const info = quiz.stepInfo(cue, step);
+      if (info.kind === 'open') data.endsAt = this.now() + cue.questions[info.q].duration * 1000;
+    }
+    this.record('cue.step', data);
+  }
+
+  requireCue(type, message) {
+    const cue = this.currentCue();
+    if (!cue || cue.type !== type) throw new CommandError(message);
+    return cue;
   }
 
   requireVoteCue(cueId) {
@@ -158,9 +226,11 @@ class Engine extends EventEmitter {
       case 'go': {
         const go = this.describeGo();
         if (go.action === 'enter') this.enter(go.cueId, s.started ? 'go' : 'start');
-        else if (go.action === 'step') this.record('cue.step', { cueId: s.cueId, step: go.step });
+        else if (go.action === 'step') this.goToStep(this.currentCue(), go.step);
         else if (go.action === 'vote.open') this.openVote(this.currentCue());
         else if (go.action === 'vote.close') this.closeVote(this.currentCue(), 'operator');
+        else if (go.action === 'challenge.open') this.openChallenge(this.currentCue());
+        else if (go.action === 'challenge.close') this.closeChallenge(this.currentCue(), 'operator');
         else if (go.action === 'end') this.record('show.end', {});
         else throw new CommandError(go.reason || 'No hi ha res a fer amb GO.');
         return;
@@ -169,7 +239,7 @@ class Engine extends EventEmitter {
         if (s.ended) return this.enter(s.cueId, 'reenter');
         // Dins d'una cue amb passos, ENRERE torna al pas anterior.
         if (s.step > 0 && this.stepCount(this.currentCue()) > 0) {
-          this.record('cue.step', { cueId: s.cueId, step: s.step - 1 });
+          this.goToStep(this.currentCue(), s.step - 1);
           return;
         }
         if (s.history.length === 0) throw new CommandError('No hi ha cap cue anterior.');
@@ -177,7 +247,7 @@ class Engine extends EventEmitter {
         this.enter(target, 'back');
         // Tornant a una cue amb passos, es torna al darrer pas (on s'havia quedat).
         const count = this.stepCount(this.cue(target));
-        if (count > 1) this.record('cue.step', { cueId: target, step: count - 1 });
+        if (count > 1) this.goToStep(this.cue(target), count - 1);
         return;
       }
       case 'step': {
@@ -186,7 +256,7 @@ class Engine extends EventEmitter {
         if (!count) throw new CommandError('Aquesta cue no té passos.');
         const step = Number(cmd.step);
         if (!(Number.isInteger(step) && step >= 0 && step < count)) throw new CommandError('Pas no vàlid.');
-        if (step !== s.step) this.record('cue.step', { cueId: cue.id, step });
+        if (step !== s.step) this.goToStep(cue, step);
         return;
       }
       case 'jump':
@@ -237,6 +307,68 @@ class Engine extends EventEmitter {
       }
       case 'ballot':
         return this.ballot(cmd.deviceId, Number(cmd.option));
+      case 'answer':
+        return this.quizAnswer(cmd.deviceId, Number(cmd.option));
+      case 'quiz.extend': {
+        const cue = this.requireCue('quiz', 'No hi ha cap qüestionari en aquesta cue.');
+        if (quiz.stepInfo(cue, s.step).kind !== 'open' || !s.stepEndsAt) {
+          throw new CommandError('No hi ha cap pregunta oberta.');
+        }
+        const secs = Number(cmd.seconds) > 0 ? Number(cmd.seconds) : 15;
+        this.record('step.extend', { cueId: cue.id, endsAt: Math.max(s.stepEndsAt, this.now()) + secs * 1000 });
+        return;
+      }
+      case 'quiz.reset': {
+        // Esborra les respostes d'una pregunta (p. ex. si han fallat els mòbils).
+        const cue = this.requireCue('quiz', 'No hi ha cap qüestionari en aquesta cue.');
+        const q = cmd.q != null ? Number(cmd.q) : quiz.stepInfo(cue, s.step).q;
+        if (!(Number.isInteger(q) && q >= 0 && q < cue.questions.length)) throw new CommandError('Pregunta no vàlida.');
+        if (s.quiz[cue.id] && s.quiz[cue.id][q]) this.record('quiz.reset', { cueId: cue.id, q });
+        return;
+      }
+      case 'challenge.open':
+        return this.openChallenge(this.requireCue('challenge', 'No hi ha cap repte en aquesta cue.'));
+      case 'challenge.close': {
+        const cue = this.requireCue('challenge', 'No hi ha cap repte en aquesta cue.');
+        const c = s.challenges[cue.id];
+        if (!c || c.status !== 'open') throw new CommandError('El repte no està en marxa.');
+        return this.closeChallenge(cue, 'operator');
+      }
+      case 'challenge.extend': {
+        const cue = this.requireCue('challenge', 'No hi ha cap repte en aquesta cue.');
+        const c = s.challenges[cue.id];
+        if (!c || c.status !== 'open') throw new CommandError('El repte no està en marxa.');
+        const secs = Number(cmd.seconds) > 0 ? Number(cmd.seconds) : 10;
+        this.record('challenge.extend', { cueId: cue.id, endsAt: Math.max(c.endsAt, this.now()) + secs * 1000 });
+        return;
+      }
+      case 'challenge.force': {
+        const cue = this.requireCue('challenge', 'No hi ha cap repte en aquesta cue.');
+        if (!['success', 'fail'].includes(cmd.result)) throw new CommandError('Resultat no vàlid.');
+        const c = s.challenges[cue.id];
+        this.record('challenge.force', {
+          cueId: cue.id, result: cmd.result, source: cmd.source === 'manual' ? 'manual' : 'operator',
+          taps: c && c.status === 'open' ? this.liveTaps(cue) : undefined,
+        });
+        return;
+      }
+      case 'challenge.reset': {
+        const cue = this.requireCue('challenge', 'No hi ha cap repte en aquesta cue.');
+        if (s.challenges[cue.id]) this.record('challenge.reset', { cueId: cue.id });
+        this.live = null;
+        return;
+      }
+      case 'tap':
+        return this.tap(cmd.deviceId, Number(cmd.n));
+      case 'wall.post':
+        return this.wallPost(cmd.deviceId, cmd.text, cmd.drawing);
+      case 'wall.moderate': {
+        const m = s.wall.find((x) => x.id === Number(cmd.id));
+        if (!m) throw new CommandError('Missatge desconegut.');
+        if (!['approved', 'rejected', 'pending'].includes(cmd.status)) throw new CommandError('Estat no vàlid.');
+        if (m.status !== cmd.status) this.record('wall.moderate', { id: m.id, status: cmd.status });
+        return;
+      }
       case 'claim':
         return this.claim(cmd.deviceId, cmd.participantId, cmd.key);
       case 'release': {
@@ -307,6 +439,111 @@ class Engine extends EventEmitter {
     this.record('vote.ballot', { cueId: cue.id, participantId, option });
   }
 
+  quizAnswer(deviceId, option) {
+    const s = this.state;
+    const pid = this.participantOf(deviceId);
+    const cue = this.currentCue();
+    const info = cue && cue.type === 'quiz' ? quiz.stepInfo(cue, s.step) : null;
+    if (!info || info.kind !== 'open') throw new CommandError('Ara no hi ha cap pregunta oberta.');
+    const now = this.now();
+    if (s.stepEndsAt && now > s.stepEndsAt + ANSWER_GRACE_MS) throw new CommandError('S\'ha acabat el temps!');
+    const question = cue.questions[info.q];
+    if (!(option >= 0 && option < question.options.length)) throw new CommandError('Opció no vàlida.');
+    const answers = (s.quiz[cue.id] && s.quiz[cue.id][info.q]) || {};
+    if (answers[pid]) throw new CommandError('Ja has respost aquesta pregunta.');
+    const ms = Math.min(question.duration * 1000, Math.max(0, now - s.stepAt));
+    this.record('quiz.answer', { cueId: cue.id, q: info.q, participantId: pid, option, ms });
+    // Si ja han respost tots els que tenen mòbil, es passa a la solució.
+    const answered = Object.keys(this.state.quiz[cue.id][info.q]).length;
+    if (cue.closeWhenAll && answered >= Object.keys(s.claims).length) this.goToStep(cue, s.step + 1);
+  }
+
+  openChallenge(cue) {
+    if (this.state.challenges[cue.id]) throw new CommandError('El repte ja s\'ha fet. Reinicia\'l per repetir-lo.');
+    this.record('challenge.open', { cueId: cue.id, endsAt: this.now() + cue.duration * 1000 });
+  }
+
+  // Tocs del repte en curs: els desats al diari més els que encara no s'hi han desat.
+  liveTaps(cue) {
+    const c = this.state.challenges[cue.id];
+    if (!c) return {};
+    if (!this.live || this.live.cueId !== cue.id || this.live.openedSeq !== c.openedSeq) {
+      this.live = { cueId: cue.id, openedSeq: c.openedSeq, taps: Object.assign({}, c.taps), dirty: false };
+    }
+    return this.live.taps;
+  }
+
+  challengeProgress(cue) {
+    const c = this.state.challenges[cue.id];
+    const taps = c && c.status === 'open' ? this.liveTaps(cue) : (c ? c.taps : {});
+    const pids = Object.keys(taps).filter((pid) => taps[pid] > 0);
+    const total = cue.mode === 'all' ? pids.length : pids.reduce((a, pid) => a + taps[pid], 0);
+    // Modalitat "tots": l'objectiu són els nens que tenen mòbil.
+    const goal = cue.mode === 'all' ? Math.max(1, Object.keys(this.state.claims).length) : cue.goal;
+    return { taps, pids, total, goal, reached: total >= goal };
+  }
+
+  tap(deviceId, n) {
+    const pid = this.participantOf(deviceId);
+    const cue = this.currentCue();
+    const c = cue && cue.type === 'challenge' ? this.state.challenges[cue.id] : null;
+    if (!c || c.status !== 'open') throw new CommandError('Ara no hi ha cap repte en marxa.');
+    const taps = this.liveTaps(cue);
+    if (cue.mode === 'all') {
+      if (taps[pid]) return;
+      taps[pid] = 1;
+    } else {
+      const count = Number.isInteger(n) ? Math.min(MAX_TAPS_PER_MSG, Math.max(1, n)) : 1;
+      taps[pid] = (taps[pid] || 0) + count;
+    }
+    this.live.dirty = true;
+    if (this.challengeProgress(cue).reached) this.closeChallenge(cue, 'goal');
+    else this.emit('live');
+  }
+
+  closeChallenge(cue, reason) {
+    const p = this.challengeProgress(cue);
+    this.record('challenge.close', {
+      cueId: cue.id, taps: Object.assign({}, p.taps), result: p.reached ? 'success' : 'fail', reason,
+    });
+  }
+
+  flushTaps() {
+    const cue = this.currentCue();
+    if (!this.live || !this.live.dirty || !cue || cue.id !== this.live.cueId) return;
+    const c = this.state.challenges[cue.id];
+    if (!c || c.status !== 'open') return;
+    this.live.dirty = false;
+    this.record('challenge.progress', { cueId: cue.id, taps: Object.assign({}, this.live.taps) });
+  }
+
+  wallPost(deviceId, text, drawing) {
+    const s = this.state;
+    const pid = this.participantOf(deviceId);
+    const cue = this.requireCue('wall', 'Ara no es poden enviar missatges.');
+    // Text d'una línia, sense caràcters de control.
+    const clean = String(text == null ? '' : text).replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+    if (clean.length > WALL_MAX_TEXT) throw new CommandError('El missatge és massa llarg.');
+    if (drawing != null) {
+      if (!cue.drawings) throw new CommandError('En aquest mur no es poden enviar dibuixos.');
+      if (typeof drawing !== 'string' || drawing.length > WALL_MAX_DRAWING || !DRAWING_RE.test(drawing)) {
+        throw new CommandError('El dibuix no és vàlid o és massa gran.');
+      }
+    }
+    if (!clean && drawing == null) throw new CommandError('Escriu alguna cosa o fes un dibuix.');
+    const mine = s.wall.filter((m) => m.cueId === cue.id && m.participantId === pid && m.status !== 'rejected');
+    if (mine.length >= cue.maxPerPerson) {
+      throw new CommandError('Ja has enviat ' + cue.maxPerPerson + ' missatges. Gràcies!');
+    }
+    const last = mine.length ? mine[mine.length - 1].at : 0;
+    if (this.now() - last < WALL_COOLDOWN_MS) throw new CommandError('Espera uns segons abans d\'enviar-ne un altre.');
+    this.record('wall.post', {
+      id: s.seq + 1, cueId: cue.id, participantId: pid, text: clean,
+      drawing: drawing == null ? undefined : drawing,
+      status: cue.moderation ? 'pending' : 'approved',
+    });
+  }
+
   claim(deviceId, participantId, key) {
     if (!deviceId) throw new CommandError('Falta l\'identificador del dispositiu.');
     if (!this.show.participants.some((p) => p.id === participantId)) {
@@ -341,6 +578,8 @@ class Engine extends EventEmitter {
   reset(stamp) {
     const archived = this.journal.archive(stamp);
     this.state = initialState();
+    this.live = null;
+    this.drawings.clear();
     this.resume = null;
     this.position = null;
     this.recovered = false;
@@ -349,19 +588,49 @@ class Engine extends EventEmitter {
     return archived;
   }
 
+  // Execució des d'un temporitzador: els errors només s'avisen.
+  safely(what, fn) {
+    try {
+      fn();
+    } catch (err) {
+      this.emit('warning', what + ' fallit: ' + err.message);
+    }
+  }
+
   syncTimers() {
-    clearTimeout(this.timer);
-    this.timer = null;
+    this.clearTimers();
     if (!this.timersEnabled) return;
+    const s = this.state;
     const cue = this.currentCue();
-    const v = cue && cue.type === 'vote' ? this.state.votes[cue.id] : null;
+    if (!cue) return;
+    const at = (when, fn) => this.timers.push(setTimeout(fn, Math.max(0, when - this.now())));
+    const v = cue.type === 'vote' ? s.votes[cue.id] : null;
     if (v && v.status === 'open' && v.endsAt) {
-      const delay = Math.max(0, v.endsAt - this.now());
-      this.timer = setTimeout(() => {
-        this.timer = null;
+      at(v.endsAt, () => {
         const r = this.dispatch({ name: 'vote.close', cueId: cue.id, reason: 'timer' });
         if (!r.ok) this.emit('warning', 'Tancament automàtic fallit: ' + r.error);
-      }, delay);
+      });
+    }
+    // Pregunta oberta: en acabar el temps es passa a la solució.
+    if (cue.type === 'quiz' && s.stepEndsAt && quiz.stepInfo(cue, s.step).kind === 'open') {
+      const step = s.step;
+      const enterSeq = s.enterSeq;
+      at(s.stepEndsAt, () => {
+        const now = this.state;
+        if (now.cueId === cue.id && now.enterSeq === enterSeq && now.step === step) {
+          this.safely('Tancament de la pregunta', () => this.goToStep(cue, step + 1));
+        }
+      });
+    }
+    const c = cue.type === 'challenge' ? s.challenges[cue.id] : null;
+    if (c && c.status === 'open') {
+      at(c.endsAt, () => {
+        const cur = this.state.challenges[cue.id];
+        if (this.state.cueId === cue.id && cur && cur.status === 'open') {
+          this.safely('Final del repte', () => this.closeChallenge(cue, 'timer'));
+        }
+      });
+      this.timers.push(setInterval(() => this.safely('Desar els tocs', () => this.flushTaps()), TAP_FLUSH_MS));
     }
   }
 }

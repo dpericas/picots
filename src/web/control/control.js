@@ -4,10 +4,20 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const el = Gala.el;
-  const TYPE_LABEL = { video: 'VÍDEO', slides: 'FOTOS', vote: 'VOTACIÓ', hold: 'ESPERA', parade: 'ENTRADA' };
+  const TYPE_LABEL = {
+    video: 'VÍDEO', slides: 'FOTOS', vote: 'VOTACIÓ', hold: 'ESPERA', parade: 'ENTRADA',
+    quiz: 'QÜESTIONARI', challenge: 'REPTE', awards: 'MENCIONS', wall: 'MUR',
+  };
+  const STEPS_TEXT = {
+    parade: ['ENTRADA TRIOMFAL', 'GO = següent nen · ENRERE = l\'anterior · clic per saltar a qualsevol.'],
+    awards: ['MENCIONS', 'GO = següent nen · ENRERE = l\'anterior · clic per saltar a qualsevol.'],
+    quiz: ['PASSOS DEL QÜESTIONARI', 'Clic per saltar a qualsevol pas (obrir una pregunta torna a posar el temps).'],
+  };
   const GO_LABEL = {
     'vote.open': 'obrir votació',
     'vote.close': 'tancar votació',
+    'challenge.open': 'començar el repte',
+    'challenge.close': 'aturar el repte',
     end: 'acabar l\'espectacle',
   };
 
@@ -87,6 +97,18 @@
   $('btn-vote-close').addEventListener('click', () => send({ name: 'vote.close' }));
   $('btn-vote-extend').addEventListener('click', () => send({ name: 'vote.extend', seconds: 15 }));
   armed($('btn-vote-reset'), () => send({ name: 'vote.reset' }));
+  $('btn-quiz-extend').addEventListener('click', () => send({ name: 'quiz.extend', seconds: 15 }));
+  armed($('btn-quiz-reset'), () => send({ name: 'quiz.reset' }));
+  $('btn-ch-open').addEventListener('click', () => send({ name: 'challenge.open' }));
+  $('btn-ch-close').addEventListener('click', () => send({ name: 'challenge.close' }));
+  $('btn-ch-extend').addEventListener('click', () => send({ name: 'challenge.extend', seconds: 10 }));
+  $('btn-ch-success').addEventListener('click', () => send({ name: 'challenge.force', result: 'success', source: 'manual' }));
+  $('btn-ch-fail').addEventListener('click', () => send({ name: 'challenge.force', result: 'fail', source: 'manual' }));
+  armed($('btn-ch-reset'), () => send({ name: 'challenge.reset' }));
+  $('btn-wall-approve-all').addEventListener('click', () => {
+    (state.wall ? state.wall.posts : []).filter((m) => m.status === 'pending')
+      .forEach((m) => send({ name: 'wall.moderate', id: m.id, status: 'approved' }));
+  });
   $('btn-reload').addEventListener('click', async () => {
     const r = await send({ name: 'show.reload' });
     if (r.ok) toast('Guió recarregat', 'info');
@@ -130,9 +152,10 @@
       if (c.id === goTarget) classes.push('next');
       if (visited.has(c.id)) classes.push('visited');
       if (c.id === selected) classes.push('selected');
-      const branches = c.options
-        ? el('span', { class: 'branches', text: c.options.map((o, j) => String.fromCharCode(65 + j) + '→' + o.goto).join('  ') })
-        : null;
+      let branchText = null;
+      if (c.options) branchText = c.options.map((o, j) => String.fromCharCode(65 + j) + '→' + o.goto).join('  ');
+      if (c.outcomes) branchText = '✔→' + c.outcomes.success + '  ✘→' + (c.outcomes.fail || 'fi');
+      const branches = branchText ? el('span', { class: 'branches', text: branchText }) : null;
       const li = el('li', { class: classes.join(' '), title: c.notes || '' }, [
         el('span', { class: 'type', text: (i + 1) + ' ' + (TYPE_LABEL[c.type] || c.type) }),
         el('span', {}, [cueLabel(c), branches]),
@@ -208,6 +231,9 @@
     const steps = cue && cue.steps;
     $('steps-panel').classList.toggle('hidden', !steps);
     if (!steps) return;
+    const texts = STEPS_TEXT[cue.type] || STEPS_TEXT.parade;
+    $('steps-title').textContent = texts[0];
+    $('steps-hint').textContent = texts[1];
     const current = state.state.step;
     $('steps-pos').textContent = '– ' + current + ' / ' + (steps.length - 1);
     const box = $('steps');
@@ -226,7 +252,91 @@
   }
 
   function reasonText(r) {
-    return { timer: 'temps esgotat', operator: 'operador', manual: 'mà alçada', no_votes: 'sense vots' }[r] || r;
+    return {
+      timer: 'temps esgotat', operator: 'operador', manual: 'mà alçada', no_votes: 'sense vots', goal: 'objectiu assolit',
+    }[r] || r;
+  }
+
+  function renderQuiz() {
+    const q = state.quiz;
+    $('quiz-panel').classList.toggle('hidden', !q);
+    if (!q) return;
+    const KIND = { intro: 'inici', question: 'es llegeix', open: 'OBERTA', reveal: 'solució', ranking: 'classificació' };
+    $('quiz-status').textContent = '– ' + (q.q != null ? 'P' + (q.q + 1) + '/' + q.total + ' ' : '') + KIND[q.kind] +
+      (q.answeredBy ? ' · ' + q.answeredBy.length + '/' + q.expected + ' respostes' : '');
+    $('quiz-question').textContent = q.question ? q.question.text : '';
+    const table = $('quiz-table');
+    table.textContent = '';
+    if (q.question) {
+      q.question.options.forEach((text, i) => {
+        table.append(el('tr', { class: q.correct === i ? 'correct' : '' }, [
+          el('td', { text: String.fromCharCode(65 + i) + '. ' + text + (q.correct === i ? '  ✔ correcta' : '') }),
+          el('td', { class: 'n', text: String(q.counts ? q.counts[i] : 0) }),
+        ]));
+      });
+    }
+    $('btn-quiz-extend').disabled = q.kind !== 'open';
+    $('btn-quiz-reset').disabled = q.q == null || !(q.answeredBy && q.answeredBy.length);
+    const list = $('quiz-ranking');
+    list.textContent = '';
+    (q.top || []).forEach((r) => list.append(el('li', { text: r.name + ' – ' + r.points })));
+  }
+
+  function renderChallenge() {
+    const c = state.challenge;
+    $('challenge-panel').classList.toggle('hidden', !c);
+    if (!c) return;
+    const STATUS = { pending: 'pendent', open: 'EN MARXA', closed: c.result === 'success' ? 'SUPERAT' : 'NO SUPERAT' };
+    $('ch-status').textContent = '– ' + STATUS[c.status] + (c.reason ? ' (' + reasonText(c.reason) + ')' : '');
+    $('ch-progress').textContent = c.total + ' / ' + c.goal + (c.mode === 'all' ? ' nens a punt' : ' tocs') +
+      ' · ' + c.players.length + ' participants';
+    const cue = cueById(state.state.cueId);
+    if (cue && cue.outcomes) {
+      $('ch-routes').textContent = 'Superat → ' + cueLabel(cueById(cue.outcomes.success)) +
+        ' · No superat → ' + (cue.outcomes.fail ? cueLabel(cueById(cue.outcomes.fail)) : 'fi');
+    }
+    $('btn-ch-open').disabled = c.status !== 'pending';
+    $('btn-ch-close').disabled = c.status !== 'open';
+    $('btn-ch-extend').disabled = c.status !== 'open';
+    $('btn-ch-reset').disabled = c.status === 'pending';
+  }
+
+  function wallItem(m) {
+    const buttons = [];
+    const add = (text, status) => {
+      const b = el('button', { text });
+      b.addEventListener('click', () => send({ name: 'wall.moderate', id: m.id, status }));
+      buttons.push(b);
+    };
+    if (m.status !== 'approved') add('✔ Aprovar', 'approved');
+    if (m.status !== 'rejected') add(m.status === 'approved' ? 'Treure' : '✘ Rebutjar', 'rejected');
+    return el('div', { class: 'wall-item ' + m.status }, [
+      m.drawing ? el('img', { src: m.drawing, alt: 'dibuix' }) : null,
+      el('div', { class: 'body' }, [
+        el('div', { class: 'who', text: m.author.name + ' · ' + new Date(m.at).toLocaleTimeString('ca-ES') }),
+        m.drawing ? null : el('div', { text: m.text }),
+      ]),
+    ].concat(buttons));
+  }
+
+  function renderWall() {
+    const w = state.wall;
+    $('wall-panel').classList.toggle('hidden', !w);
+    if (!w) return;
+    $('wall-status').textContent = '– ' + w.pending + ' pendents · ' + w.approved + ' a la pantalla' +
+      (w.moderation ? '' : ' (sense moderació)');
+    const pending = $('wall-pending');
+    const done = $('wall-done');
+    // No es repinta si no hi ha canvis, per no perdre el clic mentre es modera.
+    const key = w.posts.map((m) => m.id + m.status).join(',');
+    if (pending.dataset.key === key) return;
+    pending.dataset.key = key;
+    pending.textContent = '';
+    done.textContent = '';
+    w.posts.filter((m) => m.status === 'pending').forEach((m) => pending.append(wallItem(m)));
+    if (!w.pending) pending.append(el('p', { class: 'hint', text: 'Cap missatge pendent.' }));
+    w.posts.filter((m) => m.status !== 'pending').reverse().forEach((m) => done.append(wallItem(m)));
+    $('btn-wall-approve-all').disabled = !w.pending;
   }
 
   function renderPhones() {
@@ -245,7 +355,8 @@
       const releaseBtn = el('button', { text: 'Alliberar', title: 'Deslliga el mòbil d\'aquest nen' });
       releaseBtn.disabled = !p.deviceId;
       releaseBtn.addEventListener('click', () => send({ name: 'release', participantId: p.id }));
-      const voted = state.vote && state.vote.voters.some((x) => x.id === p.id);
+      const voted = (state.vote && state.vote.voters.some((x) => x.id === p.id)) ||
+        (state.quiz && state.quiz.answeredBy && state.quiz.answeredBy.some((x) => x.id === p.id));
       list.append(el('li', {}, [
         el('span', { class: 'dot' + (isOnline ? ' online' : p.deviceId ? ' claimed' : ''),
           title: isOnline ? 'connectat' : p.deviceId ? 'assignat però desconnectat' : 'sense mòbil' }),
@@ -297,10 +408,18 @@
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
+  function left(endsAt) {
+    return Math.max(0, Math.ceil((endsAt - socket.serverNow()) / 1000)) + ' s';
+  }
+
   function updateTimer() {
-    const v = state && state.vote;
-    $('vote-timer').textContent = v && v.status === 'open' && v.endsAt
-      ? Math.max(0, Math.ceil((v.endsAt - socket.serverNow()) / 1000)) + ' s' : '';
+    if (!state) return;
+    const v = state.vote;
+    $('vote-timer').textContent = v && v.status === 'open' && v.endsAt ? left(v.endsAt) : '';
+    const q = state.quiz;
+    $('quiz-timer').textContent = q && q.kind === 'open' && q.endsAt ? left(q.endsAt) : '';
+    const c = state.challenge;
+    $('ch-timer').textContent = c && c.status === 'open' && c.endsAt ? left(c.endsAt) : '';
   }
 
   setInterval(() => {
@@ -313,6 +432,9 @@
     renderRundown();
     renderNow();
     renderVote();
+    renderQuiz();
+    renderChallenge();
+    renderWall();
     renderSteps();
     renderPhones();
     renderRemote();

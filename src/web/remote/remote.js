@@ -94,10 +94,47 @@
     });
   });
 
+  function left(endsAt) {
+    return endsAt && socket ? Math.max(0, Math.ceil((endsAt - socket.serverNow()) / 1000)) + ' s' : '';
+  }
+
   function updateTimer() {
     const v = state && state.vote;
-    $('vote-timer').textContent = v && v.status === 'open' && v.endsAt && socket
-      ? Math.max(0, Math.ceil((v.endsAt - socket.serverNow()) / 1000)) + ' s' : '';
+    $('vote-timer').textContent = v && v.status === 'open' ? left(v.endsAt) : '';
+    const q = state && state.quiz;
+    const c = state && state.challenge;
+    const t = q && q.kind === 'open' ? left(q.endsAt) : c && c.status === 'open' ? left(c.endsAt) : '';
+    if ($('activity-label').dataset.base != null) $('activity-label').textContent = $('activity-label').dataset.base + (t ? ' · ' + t : '');
+  }
+
+  // Qüestionari, repte o mur: el que el presentador ha de saber per comentar-ho.
+  function renderActivity(s) {
+    let label = null;
+    let main = '';
+    const detail = [];
+    if (s.quiz) {
+      const q = s.quiz;
+      label = 'QÜESTIONARI' + (q.q != null ? ' · P' + (q.q + 1) + '/' + q.total : '');
+      main = q.question || (q.kind === 'ranking' ? 'Classificació' : 'Inici');
+      if (q.correct) detail.push('Correcta: ' + q.correct);
+      if (q.kind === 'open' || q.kind === 'reveal') detail.push('Han respost ' + q.answered + ' de ' + q.expected);
+      if (q.top.length && (q.kind === 'reveal' || q.kind === 'ranking')) detail.push('Primers: ' + q.top.join(', '));
+    } else if (s.challenge) {
+      const c = s.challenge;
+      label = 'REPTE';
+      main = c.status === 'pending' ? 'Encara no ha començat'
+        : c.status === 'open' ? c.total + ' / ' + c.goal
+          : (c.result === 'success' ? '🎉 Superat!' : 'No superat');
+    } else if (s.wall) {
+      label = 'MUR DE MISSATGES';
+      main = s.wall.approved + ' a la pantalla';
+      if (s.wall.pending) detail.push(s.wall.pending + ' pendents de revisar pel tècnic');
+    }
+    $('activity').classList.toggle('hidden', !label);
+    $('activity-label').dataset.base = label || '';
+    $('activity-label').textContent = label || '';
+    $('activity-main').textContent = main;
+    $('activity-detail').textContent = detail.join('\n');
   }
   setInterval(updateTimer, 250);
 
@@ -132,6 +169,9 @@
       $('vote-voters').textContent = v.status === 'pending' ? '' : 'Han votat ' + v.voters + ' de ' + v.expected;
       updateTimer();
     }
+
+    renderActivity(s);
+    updateTimer();
 
     const g = s.go;
     $('go-label').textContent = g.label ? '→ ' + g.label : (g.reason || '');

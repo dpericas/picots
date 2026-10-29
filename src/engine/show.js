@@ -6,7 +6,20 @@ const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
 
-const CUE_TYPES = { video: 'video', diapositives: 'slides', votacio: 'vote', espera: 'hold', entrada: 'parade' };
+const CUE_TYPES = {
+  video: 'video',
+  diapositives: 'slides',
+  votacio: 'vote',
+  espera: 'hold',
+  entrada: 'parade',
+  questionari: 'quiz',
+  'qüestionari': 'quiz',
+  repte: 'challenge',
+  mencions: 'awards',
+  mur: 'wall',
+};
+const CHALLENGE_MODES = { tocs: 'taps', tots: 'all' };
+const MAX_QUIZ_OPTIONS = 4;
 const TIE_RULES = { aleatori: 'random', primera: 'first', operador: 'operator' };
 const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 
@@ -78,11 +91,85 @@ function normalizeCue(raw, index, problems) {
     cue.nameOverVideo = raw.nom_sobre_video !== false;
     cue.order = Array.isArray(raw.ordre) ? raw.ordre.map(String) : null;
     cue.people = [];
+  } else if (cue.type === 'awards') {
+    cue.text = raw.text != null ? String(raw.text) : '';
+    cue.finalText = raw.text_final != null ? String(raw.text_final) : '';
+    cue.music = raw.musica || null;
+    cue.effect = raw.efecte || null;
+    cue.order = Array.isArray(raw.ordre) ? raw.ordre.map(String) : null;
+    cue.mentions = raw.mencions && typeof raw.mencions === 'object' ? raw.mencions : {};
+    cue.people = [];
+  } else if (cue.type === 'quiz') {
+    normalizeQuiz(cue, raw, problems);
+  } else if (cue.type === 'challenge') {
+    cue.text = raw.text != null ? String(raw.text) : '';
+    cue.music = raw.musica || null;
+    cue.mode = CHALLENGE_MODES[raw.modalitat || 'tocs'];
+    cue.goal = raw.objectiu != null ? Number(raw.objectiu) : 200;
+    cue.duration = raw.temps != null ? Number(raw.temps) : 20;
+    cue.successGoto = raw.si_exit != null ? String(raw.si_exit) : null;
+    cue.failGoto = raw.si_no != null ? String(raw.si_no) : null;
+    if (!cue.mode) problems.push(problem('error', cue.id, 'Modalitat desconeguda: "' + raw.modalitat + '". Vàlides: tocs, tots.'));
+    if (cue.mode === 'taps' && !(Number.isInteger(cue.goal) && cue.goal > 0)) {
+      problems.push(problem('error', cue.id, '"objectiu" ha de ser un nombre de tocs més gran que 0.'));
+    }
+    if (!(cue.duration > 0)) problems.push(problem('error', cue.id, '"temps" ha de ser un número de segons > 0.'));
+    if (!cue.successGoto) problems.push(problem('error', cue.id, 'El repte necessita "si_exit" (on anem si el superen).'));
+  } else if (cue.type === 'wall') {
+    cue.text = raw.text != null ? String(raw.text) : '';
+    cue.music = raw.musica || null;
+    cue.moderation = raw.moderacio !== false;
+    cue.drawings = raw.dibuixos !== false;
+    cue.maxPerPerson = raw.maxim_per_nen != null ? Number(raw.maxim_per_nen) : 3;
+    if (!(Number.isInteger(cue.maxPerPerson) && cue.maxPerPerson > 0)) {
+      problems.push(problem('error', cue.id, '"maxim_per_nen" ha de ser un enter > 0.'));
+    }
   } else {
     cue.text = raw.text != null ? String(raw.text) : '';
     cue.music = raw.musica || null;
   }
   return cue;
+}
+
+// "correcta" admet la lletra de l'opció (A, B, C, D) o l'índex (0, 1, 2, 3).
+function parseCorrect(value) {
+  if (typeof value === 'number') return value;
+  const t = String(value == null ? '' : value).trim().toUpperCase();
+  if (/^[A-D]$/.test(t)) return t.charCodeAt(0) - 65;
+  if (/^\d+$/.test(t)) return Number(t);
+  return -1;
+}
+
+function normalizeQuiz(cue, raw, problems) {
+  cue.text = raw.text != null ? String(raw.text) : '';
+  cue.music = raw.musica || null;
+  cue.ranking = raw.classificacio != null ? Number(raw.classificacio) : 5;
+  cue.closeWhenAll = raw.tancar_quan_tots !== false;
+  const defaultTime = raw.temps != null ? Number(raw.temps) : 20;
+  cue.questions = (Array.isArray(raw.preguntes) ? raw.preguntes : []).map((q, i) => {
+    q = q || {};
+    const out = {
+      text: q.pregunta != null ? String(q.pregunta) : '',
+      options: (Array.isArray(q.opcions) ? q.opcions : []).map(String),
+      correct: parseCorrect(q.correcta),
+      duration: q.temps != null ? Number(q.temps) : defaultTime,
+      image: q.imatge || null,
+    };
+    const where = 'Pregunta ' + (i + 1) + ': ';
+    if (!out.text) problems.push(problem('error', cue.id, where + 'falta "pregunta".'));
+    if (out.options.length < 2 || out.options.length > MAX_QUIZ_OPTIONS) {
+      problems.push(problem('error', cue.id, where + 'ha de tenir entre 2 i ' + MAX_QUIZ_OPTIONS + ' opcions.'));
+    }
+    if (!(out.correct >= 0 && out.correct < out.options.length)) {
+      problems.push(problem('error', cue.id, where + '"correcta" ha de ser la lletra d\'una opció (A, B…).'));
+    }
+    if (!(out.duration > 0)) problems.push(problem('error', cue.id, where + '"temps" ha de ser un número de segons > 0.'));
+    return out;
+  });
+  if (cue.questions.length === 0) problems.push(problem('error', cue.id, 'El qüestionari no té cap pregunta ("preguntes").'));
+  if (!(Number.isInteger(cue.ranking) && cue.ranking >= 0)) {
+    problems.push(problem('error', cue.id, '"classificacio" ha de ser un enter >= 0 (0 = no mostrar punts).'));
+  }
 }
 
 function normalize(doc, problems) {
@@ -92,6 +179,7 @@ function normalize(doc, problems) {
     avatar: (p && p.avatar) || null,
     photo: (p && p.foto) || null,
     entryVideo: (p && p.video_entrada) || null,
+    mention: p && p.mencio != null ? String(p.mencio) : null,
   }));
   const cues = (Array.isArray(doc.cues) ? doc.cues : []).map((c, i) => normalizeCue(c || {}, i, problems));
   const net = doc.xarxa || {};
@@ -118,6 +206,13 @@ function validateRefs(show, problems) {
     if (cue.next && !ids.has(cue.next)) {
       problems.push(problem('error', cue.id, '"seguent" apunta a una cue que no existeix: ' + cue.next));
     }
+    if (cue.type === 'challenge') {
+      [['si_exit', cue.successGoto], ['si_no', cue.failGoto]].forEach(([key, target]) => {
+        if (target && !ids.has(target)) {
+          problems.push(problem('error', cue.id, '"' + key + '" apunta a una cue que no existeix: ' + target));
+        }
+      });
+    }
     if (cue.type === 'vote') {
       cue.options.forEach((o, i) => {
         if (!o.goto) problems.push(problem('error', cue.id, 'L\'opció ' + i + ' no té "va_a".'));
@@ -132,9 +227,9 @@ function validateRefs(show, problems) {
     if (pids.has(p.id)) problems.push(problem('error', null, 'Participant amb id repetit: ' + p.id));
     pids.add(p.id);
   }
-  // Entrada triomfal: per defecte, tots els participants en l'ordre de la llista.
+  // Entrada triomfal i mencions: per defecte, tots els participants en l'ordre de la llista.
   for (const cue of show.cues) {
-    if (cue.type !== 'parade') continue;
+    if (cue.type !== 'parade' && cue.type !== 'awards') continue;
     const ids = cue.order || show.participants.map((p) => p.id);
     const seen = new Set();
     for (const id of ids) {
@@ -148,7 +243,20 @@ function validateRefs(show, problems) {
         problems.push(problem('warn', cue.id, p.name + ' no surt a l\'"ordre" de l\'entrada.'));
       });
     }
-    if (cue.people.length === 0) problems.push(problem('error', cue.id, 'L\'entrada no té cap participant.'));
+    if (cue.people.length === 0) problems.push(problem('error', cue.id, 'La cue no té cap participant.'));
+    if (cue.type === 'awards') {
+      Object.keys(cue.mentions).filter((id) => !pids.has(id)).forEach((id) => {
+        problems.push(problem('error', cue.id, '"mencions" inclou un participant que no existeix: ' + id));
+      });
+      // La menció de la cue té preferència sobre la del participant.
+      cue.mentionFor = {};
+      cue.people.forEach((id) => {
+        const p = show.participants.find((x) => x.id === id);
+        const text = cue.mentions[id] != null ? String(cue.mentions[id]) : p.mention;
+        cue.mentionFor[id] = text || '';
+        if (!text) problems.push(problem('warn', cue.id, p.name + ' no té menció (mencio o mencions).'));
+      });
+    }
   }
   if (show.cues.length === 0) problems.push(problem('error', null, 'El guió no té cap cue.'));
 }
@@ -183,7 +291,14 @@ function resolveMedia(show, showDir, problems) {
     if (cue.effect && !exists(cue.effect)) {
       problems.push(problem('warn', cue.id, 'No es troba l\'efecte de so: ' + cue.effect));
     }
-    if (cue.type === 'parade') {
+    if (cue.type === 'quiz') {
+      cue.questions.forEach((q, i) => {
+        if (q.image && !exists(q.image)) {
+          problems.push(problem('error', cue.id, 'Pregunta ' + (i + 1) + ': no es troba la imatge ' + q.image));
+        }
+      });
+    }
+    if (cue.type === 'parade' || cue.type === 'awards') {
       cue.people.map((id) => show.participants.find((p) => p.id === id))
         .filter((p) => !p.photo && !p.avatar)
         .forEach((p) => problems.push(problem('warn', cue.id, p.name + ' no té foto ni avatar: sortiran les inicials.')));

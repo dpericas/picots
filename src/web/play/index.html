@@ -19,6 +19,40 @@
       <h1 id="me-name"></h1>
       <p class="big">Mira la pantalla! 👀</p>
     </section>
+    <section id="quiz" class="hidden">
+      <div id="quiz-head"></div>
+      <h1 id="quiz-question"></h1>
+      <div id="quiz-timer" class="timer"></div>
+      <div id="quiz-options"></div>
+      <div id="quiz-result"></div>
+      <p id="quiz-msg"></p>
+    </section>
+    <section id="challenge" class="hidden">
+      <h1 id="ch-text"></h1>
+      <div id="ch-timer" class="timer"></div>
+      <button id="ch-tap"></button>
+      <div class="progress"><div id="ch-bar"></div></div>
+      <p id="ch-msg"></p>
+    </section>
+    <section id="wall" class="hidden">
+      <h1 id="wall-text"></h1>
+      <div id="wall-tabs">
+        <button id="wall-tab-text" class="on">✏️ Escriure</button>
+        <button id="wall-tab-draw">🎨 Dibuixar</button>
+      </div>
+      <div id="wall-write">
+        <textarea id="wall-input" maxlength="100" rows="3" placeholder="Escriu el teu missatge…"></textarea>
+        <div id="wall-emojis"></div>
+      </div>
+      <div id="wall-draw" class="hidden">
+        <canvas id="wall-canvas" width="320" height="320"></canvas>
+        <div id="wall-colors"></div>
+        <button id="wall-clear">Esborrar</button>
+      </div>
+      <button id="wall-send">Enviar</button>
+      <p id="wall-left"></p>
+      <ul id="wall-mine"></ul>
+    </section>
     <section id="vote" class="hidden">
       <h1 id="question"></h1>
       <div id="timer"></div>

@@ -104,3 +104,20 @@ code { word-break: break-all; }
 .toast.info { background: var(--accent); }
 dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; text-align: center; }
 dialog img { width: 320px; height: 320px; background: #fff; }
+
+#quiz-question { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+#quiz-timer, #ch-timer { color: var(--warn); font-size: 16px; }
+#quiz-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+#quiz-table td { padding: 4px; border-bottom: 1px solid var(--line); }
+#quiz-table td.n { text-align: right; font-size: 18px; font-weight: 700; width: 40px; }
+#quiz-table tr.correct td { color: var(--go); font-weight: 700; }
+#quiz-ranking { margin: 6px 0 0; padding-left: 22px; columns: 2; }
+#ch-progress { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.wall-item { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.wall-item .body { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.wall-item .who { color: var(--muted); font-size: 12px; }
+.wall-item img { width: 72px; height: 72px; background: #fff; border-radius: 4px; object-fit: contain; }
+.wall-item button { padding: 4px 8px; font-size: 12px; }
+.wall-item.approved .body { color: var(--go); }
+.wall-item.rejected .body { color: var(--muted); text-decoration: line-through; }
+summary { cursor: pointer; color: var(--muted); margin-top: 6px; }

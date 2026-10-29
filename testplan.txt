@@ -1,7 +1,7 @@
-PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador)
+PLA DE PROVES – Gala Manager (cicle 1: esquelet; cicle 2: vídeo sense talls; cicle 3: entrada triomfal; cicle 4: vídeos d'entrada; cicle 5: comandament del presentador; cicle 6: qüestionari, repte, mencions i mur)
 ================================================
 
-Proves automàtiques: `npm test` (32 tests: motor, guió i servidor). Aquest pla cobreix
+Proves automàtiques: `npm test` (46 tests: motor, guió, servidor i les cues interactives). Aquest pla cobreix
 el que els tests no poden verificar (pantalles reals, xarxa, Windows) i, per a cada
 àrea automatitzada, només la prova manual mínima que la confirma en condicions reals.
 
@@ -47,12 +47,17 @@ Expected Result: Cada vot apareix al moment al panell i al projector (avatar que
 
 ------------------------------------------------------------------------------
 T05 – Càrrega amb 30 mòbils simulats
-Purpose: Comprovar que el servidor i el projector aguanten ràfegues de vots.
-Method:  1. npm start (o npm run dev-server).
-         2. npm run simulate -- --n=30 --delay=3   (cal que el guió tingui 30 participants)
-         3. Obrir una votació.
-Expected Result: Els 30 vots arriben en < 5 s, els recomptes són correctes i el panell
-         no s'alenteix.
+Purpose: Comprovar que el servidor i el projector aguanten ràfegues de vots, respostes,
+         tocs del repte i missatges.
+Method:  1. npm start (o npm run dev-server) amb un guió de 30 participants.
+         2. npm run simulate -- --n=30 --delay=3 --taps=6
+         3. Obrir una votació; una pregunta del qüestionari; el repte; el mur.
+Expected Result: Els 30 vots/respostes arriben en < 5 s i els recomptes són correctes; la
+         solució del qüestionari surt sola quan han respost tots; el comptador del repte
+         puja de manera fluida al projector (~7 actualitzacions/s) i el diari només hi afegeix
+         una línia per segon; els 30 missatges surten pendents al panell. El panell no
+         s'alenteix. (Referència a aquest PC amb 23 mòbils: 23 respostes en 2,1 s; 2.000 tocs
+         en 3,8 s amb 3 línies de progrés al diari.)
 
 ------------------------------------------------------------------------------
 T06 – Pla B: vot a mà alçada i empat per operador
@@ -184,3 +189,55 @@ Expected Result: (2) Cada GO respon en < 0,5 s i el mòbil vibra; el text del gu
          són correctes. (3) Cada vegada s'avança només un pas; un dels dos rep «Ja s'ha avançat».
          (4) GO rebutjat amb «bloquejat»; l'avís surt al panell en franja vermella, sense so.
          (5) Es reconnecta sol sense tornar a demanar el PIN.
+
+------------------------------------------------------------------------------
+T19 – Qüestionari amb mòbils reals
+Purpose: Verificar el flux pregunta → resposta oberta → solució → podi, els punts i el que
+         veu cada mòbil, amb dispositius reals.
+Method:  1. Cue quiz1 de l'exemple; 4+ mòbils amb noms diferents.
+         2. GO (es llegeix): els mòbils mostren la pregunta però no deixen respondre.
+         3. GO (oberta): respondre amb tots menys un, a velocitats diferents; tornar a tocar.
+         4. Esperar que s'acabi el temps. Repetir amb una pregunta en què responen tots.
+         5. Al final, GO fins al podi. Provar +15 s i «Repetir pregunta» en una pregunta.
+Expected Result: (3) Cada resposta suma un avatar a la pantalla i el comptador «X de Y han
+         respost»; el segon toc es rebutja («Ja has respost»). (4) En acabar el temps (o quan
+         han respost tots) surt la solució: correcta destacada, recomptes i classificació. Cada
+         mòbil diu «Correcte! +N» o «Era la X» i el total. Els més ràpids tenen més punts.
+         (5) Podi 2-1-3 amb confeti. +15 s allarga el compte enrere a tot arreu; repetir
+         permet tornar a respondre.
+
+------------------------------------------------------------------------------
+T20 – Repte col·lectiu a la sala
+Purpose: Verificar el repte de tocs amb mòbils reals, el ritme d'actualització i les dues
+         branques, i el pla B manual.
+Method:  1. Cue repte de l'exemple. GO: tots toquen el botó tan ràpid com puguin.
+         2. Repetir (Reiniciar repte) i que no toqui ningú fins que s'acabi el temps.
+         3. Repetir amb els mòbils en mode avió i decidir-ho amb «Superat».
+         4. Canviar a modalitat: tots i comprovar que cal que premin tots.
+Expected Result: (1) El cadenat tremola i el comptador puja al moment; en arribar a
+         l'objectiu, «REPTE SUPERAT!» amb confeti i GO va a «Escena extra». (2) «Gairebé!»
+         i GO va a «Final». (3) GO va a «Escena extra» sense mòbils. (4) Es supera quan l'últim
+         nen amb mòbil prem «Sóc a punt!».
+
+------------------------------------------------------------------------------
+T21 – Mencions (diplomes)
+Purpose: Verificar la presentació nen a nen amb la menció i els avisos del guió.
+Method:  1. Treure la mencio d'un participant i recarregar el guió.
+         2. Cue diplomes: GO per tots els nens, ENRERE, clic a un nen concret al panell.
+Expected Result: (1) Avís «X no té menció» al panell (no bloqueja). (2) Cada nen surt amb
+         foto, nom i menció sobre fons daurat, amb confeti i efecte de so; al final el mosaic
+         amb «Felicitats, Picots!». ENRERE i els salts funcionen com a l'entrada.
+
+------------------------------------------------------------------------------
+T22 – Mur de missatges i moderació
+Purpose: Verificar l'enviament de textos i dibuixos des de mòbils reals, la moderació i els
+         límits.
+Method:  1. Cue mur. Des de 3 mòbils: un text amb emojis, un dibuix fet amb el dit (iOS i
+            Android), i un quart missatge des del mateix mòbil.
+         2. Al panell: aprovar-ne dos, rebutjar-ne un; després «Treure» un d'aprovat.
+         3. Des d'un altre ordinador de la xarxa, obrir l'adreça d'un dibuix no aprovat
+            (/api/mur/<id>).
+Expected Result: (1) Al mòbil «pendent de revisar»; el quart es rebutja («Ja has enviat 3»).
+         El dibuix es veu bé al panell (miniatura). (2) Només els aprovats surten a la
+         pantalla, amb animació; en treure'n un desapareix; el mòbil n'actualitza l'estat.
+         (3) Error 403: els dibuixos no aprovats no es poden veure des de fora.

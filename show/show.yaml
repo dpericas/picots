@@ -12,6 +12,19 @@
 #                text (pantalla inicial), text_final (sobre el mosaic), musica (de fons, en bucle),
 #                efecte (so curt a cada nen sense vídeo), ordre (llista d'ids; per defecte, tots),
 #                nom_sobre_video (true per defecte: el nom surt a sota mentre sona el vídeo del nen)
+#   questionari  preguntes tipus Kahoot: preguntes [{pregunta, opcions (2-4), correcta (A, B, C, D),
+#                temps, imatge}], temps (per defecte de cada pregunta, 20 s), text (pantalla inicial),
+#                classificacio (quants en surten a la classificació, 5; 0 = sense punts a la pantalla),
+#                tancar_quan_tots (true: quan han respost tots es passa a la solució), musica.
+#                GO per cada pregunta: es llegeix -> resposta oberta -> solució; al final, classificació.
+#   repte        repte col·lectiu: modalitat (tocs = toquen el mòbil fins a l'objectiu; tots = cal que
+#                premin tots els que tenen mòbil), objectiu (tocs entre tots), temps (s),
+#                si_exit (cue si el superen, obligatori), si_no (si no; per defecte la de sota), text, musica.
+#   mencions     diplomes: GO passa nen a nen (foto, nom i menció) i al final mosaic. La menció surt de
+#                "mencio" de cada participant o de mencions: {id: text} de la cue. text, text_final,
+#                musica, efecte, ordre (com l'entrada).
+#   mur          mur de missatges i dibuixos des dels mòbils. text (consigna), moderacio (true: el tècnic
+#                aprova cada missatge abans que surti), dibuixos (true), maxim_per_nen (3), musica.
 # Comuns: id (obligatori), titol, seguent (si no, la de sota), notes (només al panell del tècnic),
 #         guio (el que ha de dir el presentador: surt al seu comandament)
 
@@ -27,13 +40,14 @@ xarxa:
 # video_entrada: resum del seu pas per l'escola (amb la seva música integrada). A l'entrada
 #   triomfal es reprodueix amb el nom a sobre i, en acabar, surt la targeta amb la foto.
 # avatar: dibuix del personatge del conte (votacions). Si no hi ha foto, s'usa l'avatar.
+# mencio: el text del diploma (cue de tipus mencions).
 participants:
-  - { id: anna,   nom: Anna,   foto: media/fotos/anna.jpg,  video_entrada: media/entrada/anna.mp4 }
-  - { id: biel,   nom: Biel,   foto: media/fotos/biel.jpg,  video_entrada: media/entrada/biel.mp4 }
-  - { id: carla,  nom: Carla,  foto: media/fotos/carla.jpg, video_entrada: media/entrada/carla.mp4 }
-  - { id: dani,   nom: Dani,   foto: media/fotos/dani.jpg,  video_entrada: media/entrada/dani.mp4 }
-  - { id: emma,   nom: Emma,   foto: media/fotos/emma.jpg }
-  - { id: ferran, nom: Ferran, foto: media/fotos/ferran.jpg }
+  - { id: anna,   nom: Anna,   foto: media/fotos/anna.jpg,  video_entrada: media/entrada/anna.mp4,  mencio: "La rialla més contagiosa" }
+  - { id: biel,   nom: Biel,   foto: media/fotos/biel.jpg,  video_entrada: media/entrada/biel.mp4,  mencio: "L'inventor de jocs" }
+  - { id: carla,  nom: Carla,  foto: media/fotos/carla.jpg, video_entrada: media/entrada/carla.mp4, mencio: "La millor companya" }
+  - { id: dani,   nom: Dani,   foto: media/fotos/dani.jpg,  video_entrada: media/entrada/dani.mp4,  mencio: "El més curiós" }
+  - { id: emma,   nom: Emma,   foto: media/fotos/emma.jpg,  mencio: "L'artista de la classe" }
+  - { id: ferran, nom: Ferran, foto: media/fotos/ferran.jpg, mencio: "El cor més gran" }
 
 cues:
   - id: entrada
@@ -93,6 +107,26 @@ cues:
     fos: 0.8
     notes: "Entra amb fos encadenat des del capítol 2."
 
+  - id: quiz1
+    tipus: questionari
+    titol: "Qüestionari – Qui se'n recorda?"
+    text: "Quant recordeu de l'escola?"
+    temps: 20
+    classificacio: 5
+    guio: "Llegeix la pregunta en veu alta i prem GO per deixar respondre. A la solució, comenta qui l'ha encertada."
+    preguntes:
+      - pregunta: "On vam anar de colònies a P5?"
+        opcions: ["A la granja", "A la platja", "A la muntanya", "Al castell"]
+        correcta: A
+        imatge: media/records/P3/foto01.jpg
+      - pregunta: "Com es deia la mascota de la classe?"
+        opcions: ["Pipo", "Lola", "Tito"]
+        correcta: C
+      - pregunta: "Quants anys fa que anem junts a l'escola?"
+        opcions: ["3", "6", "9", "12"]
+        correcta: C
+        temps: 15
+
   - id: records
     tipus: diapositives
     titol: "Records de P3"
@@ -106,14 +140,49 @@ cues:
     temps: 20
     empat: operador
     opcions:
-      - { text: "Cançó 1", va_a: final }
-      - { text: "Cançó 2", va_a: final }
-      - { text: "Cançó 3", va_a: final }
+      - { text: "Cançó 1", va_a: repte }
+      - { text: "Cançó 2", va_a: repte }
+      - { text: "Cançó 3", va_a: repte }
+
+  - id: repte
+    tipus: repte
+    titol: "Repte – Obrim el cofre!"
+    text: "Toqueu el mòbil tan ràpid com pugueu per obrir el cofre!"
+    modalitat: tocs
+    objectiu: 300
+    temps: 20
+    si_exit: extra
+    si_no: final
+    guio: "Tots junts! Quan premis GO comença el compte enrere: que toquin el botó tan ràpid com puguin."
+    notes: "Amb 23 nens, 300 tocs en 20 s és assequible. Si fallen els mòbils: aplaudiments i «Superat»."
+
+  - id: extra
+    tipus: espera
+    titol: "Escena extra desbloquejada"
+    text: "🔓 Heu desbloquejat l'escena secreta!"
+    seguent: final
 
   - id: final
     tipus: video
     titol: "Final desbloquejat"
     fitxer: media/video/final.mp4
+
+  - id: diplomes
+    tipus: mencions
+    titol: "Entrega de diplomes"
+    text: "Entrega de diplomes"
+    text_final: "Felicitats, Picots!"
+    efecte: media/so/entrada.mp3
+    guio: "Digues el nom i la menció; el nen surt a recollir el diploma. GO per al següent."
+
+  - id: mur
+    tipus: mur
+    titol: "Mur de missatges"
+    text: "Envieu un missatge o un dibuix als profes! 💌"
+    moderacio: true
+    maxim_per_nen: 3
+    guio: "Ara podeu enviar un missatge o un dibuix als profes des del mòbil!"
+    notes: "Aprova els missatges al panell (MUR). Només surten a la pantalla els aprovats."
 
   - id: fi
     tipus: espera

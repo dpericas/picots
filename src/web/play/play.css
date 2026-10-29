@@ -46,3 +46,61 @@ footer { padding: 12px; text-align: center; }
 #not-me { background: transparent; color: #aab; border: 1px solid #556; border-radius: 8px; padding: 8px 14px; font-size: 14px; }
 #offline { background: #e5484d; text-align: center; padding: 6px; font-weight: 700; }
 #error { position: fixed; bottom: 70px; left: 16px; right: 16px; background: #e5484d; padding: 12px; border-radius: 10px; text-align: center; font-weight: 700; }
+
+/* --- Qüestionari --- */
+.timer { font-size: 40px; font-weight: 800; color: var(--accent); min-height: 48px; }
+#quiz-head { color: #aab; font-weight: 700; }
+#quiz-question { font-size: 24px; }
+#quiz-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+#quiz-options button {
+  border: 0; border-radius: 18px; padding: 18px 10px; min-height: 110px; color: #fff; font-size: 20px; font-weight: 800;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  transition: transform 0.15s, opacity 0.2s; touch-action: manipulation;
+}
+#quiz-options button .shape { font-size: 34px; line-height: 1; }
+#quiz-options button:active { transform: scale(0.96); }
+#quiz-options button.chosen { outline: 6px solid #fff; }
+#quiz-options button.dim { opacity: 0.3; }
+#quiz-options button.correct { outline: 6px solid #7CFC9A; opacity: 1; }
+#quiz-result { font-size: 30px; font-weight: 800; margin-top: 12px; }
+#quiz-result.good { color: #7CFC9A; }
+#quiz-result.bad { color: #ffb3b5; }
+#quiz-msg { font-size: 19px; min-height: 26px; }
+
+/* --- Repte --- */
+#ch-tap {
+  width: min(70vw, 300px); height: min(70vw, 300px); border-radius: 50%; border: 0; margin: 12px 0;
+  background: radial-gradient(circle at 35% 30%, #ffe27a, #f39c12 60%, #b8650b);
+  color: #3a1f00; font-size: 40px; font-weight: 900; box-shadow: 0 10px 0 #8a4a05, 0 14px 30px #0008;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none;
+}
+#ch-tap.hit { transform: translateY(6px) scale(0.97); box-shadow: 0 4px 0 #8a4a05, 0 6px 16px #0008; }
+#ch-tap:disabled { filter: grayscale(0.8); opacity: 0.5; }
+.progress { width: 100%; height: 22px; border-radius: 11px; background: #2e3563; overflow: hidden; }
+#ch-bar { height: 100%; width: 0; background: linear-gradient(90deg, #3cb371, #ffcc33); transition: width 0.2s; }
+#ch-msg { font-size: 22px; font-weight: 700; min-height: 30px; }
+
+/* --- Mur --- */
+#wall { justify-content: flex-start; gap: 10px; }
+#wall-text { font-size: 22px; margin: 4px 0; }
+#wall-tabs { display: flex; gap: 8px; }
+#wall-tabs button { background: #2e3563; color: #fff; border: 0; border-radius: 10px; padding: 8px 14px; font-size: 16px; }
+#wall-tabs button.on { background: var(--accent); color: #000; font-weight: 700; }
+#wall-write, #wall-draw { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+#wall-input {
+  width: 100%; font-size: 20px; border-radius: 12px; border: 0; padding: 10px; font-family: inherit; resize: none;
+}
+#wall-emojis { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+#wall-emojis button { font-size: 28px; background: transparent; border: 0; padding: 2px 4px; }
+#wall-canvas { width: min(84vw, 320px); height: min(84vw, 320px); background: #fff; border-radius: 12px; touch-action: none; }
+#wall-colors { display: flex; gap: 8px; }
+#wall-colors button { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; }
+#wall-colors button.on { border-color: #fff; transform: scale(1.15); }
+#wall-clear { background: transparent; color: #aab; border: 1px solid #556; border-radius: 8px; padding: 6px 12px; }
+#wall-send {
+  background: var(--opt-2); color: #fff; border: 0; border-radius: 14px; padding: 14px 40px; font-size: 22px; font-weight: 800;
+}
+#wall-send:disabled { opacity: 0.4; }
+#wall-left { color: #aab; margin: 0; }
+#wall-mine { list-style: none; padding: 0; margin: 0; width: 100%; text-align: left; }
+#wall-mine li { padding: 6px 8px; border-bottom: 1px solid #2e3563; font-size: 15px; }

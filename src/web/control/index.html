@@ -59,10 +59,44 @@
         <p class="hint">Si els mòbils fallen: vot a mà alçada i clica «Mà alçada» a l'opció guanyadora.</p>
       </div>
 
+      <div id="quiz-panel" class="card hidden">
+        <div class="label">QÜESTIONARI <span id="quiz-status"></span> <span id="quiz-timer"></span></div>
+        <div id="quiz-question"></div>
+        <table id="quiz-table"></table>
+        <div class="buttons">
+          <button id="btn-quiz-extend">+15 s</button>
+          <button id="btn-quiz-reset" class="danger">Repetir pregunta (esborra respostes)</button>
+        </div>
+        <details><summary>Classificació completa</summary><ol id="quiz-ranking"></ol></details>
+        <p class="hint">GO avança: pregunta → resposta oberta → solució. Si responen tots, la solució surt sola.</p>
+      </div>
+
+      <div id="challenge-panel" class="card hidden">
+        <div class="label">REPTE <span id="ch-status"></span> <span id="ch-timer"></span></div>
+        <div id="ch-progress"></div>
+        <div class="buttons">
+          <button id="btn-ch-open">Començar</button>
+          <button id="btn-ch-close">Aturar</button>
+          <button id="btn-ch-extend">+10 s</button>
+          <button id="btn-ch-success">✔ Superat</button>
+          <button id="btn-ch-fail">✘ No superat</button>
+          <button id="btn-ch-reset" class="danger">Reiniciar repte</button>
+        </div>
+        <p class="hint" id="ch-routes"></p>
+        <p class="hint">Si fallen els mòbils: feu-ho amb aplaudiments i premeu «Superat» o «No superat».</p>
+      </div>
+
+      <div id="wall-panel" class="card hidden">
+        <div class="label">MUR <span id="wall-status"></span></div>
+        <div class="buttons"><button id="btn-wall-approve-all">Aprovar tots els pendents</button></div>
+        <div id="wall-pending"></div>
+        <details><summary>Publicats i rebutjats</summary><div id="wall-done"></div></details>
+      </div>
+
       <div id="steps-panel" class="card hidden">
-        <div class="label">ENTRADA TRIOMFAL <span id="steps-pos"></span></div>
+        <div class="label"><span id="steps-title">ENTRADA TRIOMFAL</span> <span id="steps-pos"></span></div>
         <div id="steps"></div>
-        <p class="hint">GO = següent nen · ENRERE = l'anterior · clic per saltar a qualsevol.</p>
+        <p class="hint" id="steps-hint"></p>
       </div>
 
       <div class="card">
