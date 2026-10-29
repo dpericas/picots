@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gala Manager – Control</title>
+  <link rel="stylesheet" href="/static/control/control.css">
+</head>
+<body>
+  <header>
+    <h1 id="title">Gala Manager</h1>
+    <span id="conn" class="pill bad">Desconnectat</span>
+    <span id="overlay-state" class="pill"></span>
+    <span id="clock"></span>
+  </header>
+  <div id="recovered" class="banner hidden">
+    Sessió recuperada després d'un tancament. Comprova la cue actual i continua amb GO o salta on calgui.
+    <button id="recovered-ok">Entesos</button>
+  </div>
+  <main>
+    <section id="rundown-col">
+      <h2>Escaleta <small>(doble clic per saltar)</small></h2>
+      <ol id="rundown"></ol>
+    </section>
+
+    <section id="center-col">
+      <div id="now" class="card">
+        <div class="label">ARA</div>
+        <div id="now-title">—</div>
+        <div id="now-meta"></div>
+        <div id="now-notes"></div>
+      </div>
+      <div class="buttons main">
+        <button id="btn-back" class="big" title="Shift+←">◀ ENRERE</button>
+        <button id="btn-go" class="big go" title="Espai">GO ▶<small id="go-label"></small></button>
+      </div>
+      <div class="buttons">
+        <button id="btn-pause" title="P">⏯ PAUSA</button>
+        <button id="btn-restart" title="Torna a començar la cue actual">⟲ REINICIAR CUE</button>
+      </div>
+      <div class="buttons panic">
+        <button id="btn-black" title="N">■ PANTALLA NEGRA</button>
+        <button id="btn-hold" title="E">◉ PANTALLA D'ESPERA</button>
+        <button id="btn-normal" title="Esc">▣ NORMAL</button>
+      </div>
+
+      <div id="vote-panel" class="card hidden">
+        <div class="label">VOTACIÓ <span id="vote-status"></span> <span id="vote-timer"></span></div>
+        <div id="vote-question"></div>
+        <table id="vote-table"></table>
+        <div class="buttons">
+          <button id="btn-vote-open">Obrir</button>
+          <button id="btn-vote-close">Tancar</button>
+          <button id="btn-vote-extend">+15 s</button>
+          <button id="btn-vote-reset" class="danger">Reiniciar votació</button>
+        </div>
+        <p class="hint">Si els mòbils fallen: vot a mà alçada i clica «Mà alçada» a l'opció guanyadora.</p>
+      </div>
+
+      <div class="card">
+        <div class="label">PROPERA</div>
+        <div id="next-title">—</div>
+      </div>
+    </section>
+
+    <section id="side-col">
+      <div class="card">
+        <div class="label">MÒBILS <span id="phones-count"></span></div>
+        <div class="join">
+          <img id="join-qr" alt="QR per connectar-se">
+          <div><code id="join-url"></code><p class="hint">Projector i panell: <span id="client-roles"></span></p></div>
+        </div>
+        <ul id="participants"></ul>
+      </div>
+      <div class="card">
+        <div class="label">AVISOS</div>
+        <ul id="problems"></ul>
+        <ul id="media-errors"></ul>
+      </div>
+      <div class="card">
+        <div class="label">SESSIÓ</div>
+        <div class="buttons">
+          <button id="btn-reload">Recarregar guió</button>
+          <button id="btn-reset" class="danger">Nova sessió (esborra l'estat)</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="toasts"></div>
+  <dialog id="qr-dialog"><img id="qr-dialog-img" alt=""><p id="qr-dialog-text"></p><button id="qr-dialog-close">Tancar</button></dialog>
+  <script src="/static/common/client.js"></script>
+  <script src="/static/control/control.js"></script>
+</body>
+</html>

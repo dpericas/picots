@@ -1,0 +1,48 @@
+:root {
+  --bg: #1b1f3a;
+  --fg: #fff;
+  --accent: #ffcc33;
+  --opt-0: #e84a5f;
+  --opt-1: #2a9df4;
+  --opt-2: #3cb371;
+  --opt-3: #f39c12;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; }
+body { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+main { flex: 1; display: flex; padding: 16px; }
+section { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.hidden { display: none !important; }
+h1 { font-size: 28px; margin: 8px 0 16px; }
+.big { font-size: 24px; }
+
+#names { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; width: 100%; }
+#names button {
+  background: #2e3563; color: var(--fg); border: 0; border-radius: 14px; padding: 12px 8px;
+  font-size: 18px; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+#names button:disabled { opacity: 0.3; }
+.avatar {
+  width: 64px; height: 64px; border-radius: 50%; background: #445 center/cover; border: 3px solid #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px;
+}
+#me-avatar { width: 140px; height: 140px; font-size: 48px; }
+
+#timer { font-size: 40px; font-weight: 800; color: var(--accent); min-height: 48px; }
+#options { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+#options button {
+  border: 0; border-radius: 18px; padding: 22px 16px; font-size: 24px; font-weight: 800; color: #fff;
+  transition: transform 0.15s, opacity 0.2s;
+}
+#options button:active { transform: scale(0.97); }
+#options button.chosen { outline: 6px solid #fff; transform: scale(1.02); }
+#options button.dim { opacity: 0.35; }
+#options button:disabled { cursor: default; }
+.opt-0 { background: var(--opt-0); } .opt-1 { background: var(--opt-1); }
+.opt-2 { background: var(--opt-2); } .opt-3 { background: var(--opt-3); }
+#vote-msg { font-size: 20px; min-height: 28px; }
+
+footer { padding: 12px; text-align: center; }
+#not-me { background: transparent; color: #aab; border: 1px solid #556; border-radius: 8px; padding: 8px 14px; font-size: 14px; }
+#offline { background: #e5484d; text-align: center; padding: 6px; font-weight: 700; }
+#error { position: fixed; bottom: 70px; left: 16px; right: 16px; background: #e5484d; padding: 12px; border-radius: 10px; text-align: center; font-weight: 700; }

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gala – Projector</title>
+  <link rel="stylesheet" href="/static/screen/screen.css">
+</head>
+<body>
+  <div id="stage">
+    <video id="video" playsinline preload="auto"></video>
+    <div id="slides" class="layer hidden"><img id="slide-a" alt=""><img id="slide-b" alt=""></div>
+    <div id="hold" class="layer hidden"><div id="hold-text"></div></div>
+    <div id="vote" class="layer hidden">
+      <h1 id="vote-question"></h1>
+      <div id="vote-options"></div>
+      <div id="vote-footer">
+        <div id="vote-timer"></div>
+        <div id="vote-voters"></div>
+        <img id="vote-qr" alt="">
+      </div>
+    </div>
+    <div id="welcome" class="layer">
+      <h1 id="welcome-title"></h1>
+      <img id="welcome-qr" alt="">
+      <p id="welcome-url"></p>
+    </div>
+    <audio id="music" loop preload="auto"></audio>
+  </div>
+  <div id="overlay-hold" class="overlay hidden"><div class="hold-logo"></div></div>
+  <div id="overlay-black" class="overlay hidden"></div>
+  <div id="offline" class="hidden" title="Sense connexió amb el servidor"></div>
+  <div id="sound-hint" class="hidden">Clica per activar el so</div>
+  <script src="/static/common/client.js"></script>
+  <script src="/static/screen/screen.js"></script>
+</body>
+</html>

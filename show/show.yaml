@@ -1,0 +1,88 @@
+# Guió de la gala. Les rutes són relatives a aquesta carpeta.
+# Després d'editar-lo, clica «Recarregar guió» al panell (no cal reiniciar).
+#
+# Tipus de cue:
+#   video        fitxer, auto (true = passa sol a la següent en acabar)
+#   diapositives carpeta i/o imatges, segons (per foto), musica
+#   votacio      pregunta, opcions [{text, va_a}], temps (s, 0 = sense límit),
+#                empat (aleatori | primera | operador), per_defecte (opció si ningú vota)
+#   espera       text, musica
+# Comuns: id (obligatori), titol, seguent (si no, la de sota), notes (només al panell)
+
+titol: Gala Picots 2027
+
+xarxa:
+  port: 8080
+  # ip_publica: 192.168.50.10   # força l'adreça dels QR si n'hi ha més d'una
+  # pin_control: "4321"         # permet obrir /control des d'un altre aparell: /control?pin=4321
+
+participants:
+  - { id: anna,  nom: Anna }
+  - { id: biel,  nom: Biel }
+  - { id: carla, nom: Carla }
+  - { id: dani,  nom: Dani }
+  - { id: emma,  nom: Emma }
+  - { id: ferran, nom: Ferran }
+
+cues:
+  - id: benvinguda
+    tipus: espera
+    titol: Benvinguda
+    text: "La missió secreta està a punt de començar…"
+    notes: "El presentador reparteix els QR. Esperar que tothom estigui connectat."
+
+  - id: cap1
+    tipus: video
+    titol: "Capítol 1 – La carta misteriosa"
+    fitxer: media/video/cap1.mp4
+    auto: true
+
+  - id: vot1
+    tipus: votacio
+    titol: "Votació 1 – Quina porta?"
+    pregunta: "Quina porta obrim?"
+    temps: 30
+    empat: aleatori
+    per_defecte: 0
+    opcions:
+      - { text: "Porta del bosc", va_a: cap2a }
+      - { text: "Porta del castell", va_a: cap2b }
+
+  - id: cap2a
+    tipus: video
+    titol: "Capítol 2A – El bosc"
+    fitxer: media/video/cap2a.mp4
+    seguent: records
+
+  - id: cap2b
+    tipus: video
+    titol: "Capítol 2B – El castell"
+    fitxer: media/video/cap2b.mp4
+    seguent: records
+
+  - id: records
+    tipus: diapositives
+    titol: "Records de P3"
+    carpeta: media/records/P3
+    segons: 3
+
+  - id: vot2
+    tipus: votacio
+    titol: "Votació final – La cançó de la festa"
+    pregunta: "Amb quina cançó comencem la festa?"
+    temps: 20
+    empat: operador
+    opcions:
+      - { text: "Cançó 1", va_a: final }
+      - { text: "Cançó 2", va_a: final }
+      - { text: "Cançó 3", va_a: final }
+
+  - id: final
+    tipus: video
+    titol: "Final desbloquejat"
+    fitxer: media/video/final.mp4
+
+  - id: fi
+    tipus: espera
+    titol: Fi
+    text: "Moltes gràcies a tots! 🎉"

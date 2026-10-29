@@ -1,0 +1,55 @@
+{
+  "name": "gala-manager",
+  "productName": "Gala Manager",
+  "version": "0.1.0",
+  "description": "Gestor local de la gala interactiva de final de curs: projector, mòbils, votacions i panell de control.",
+  "main": "src/main/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev-server": "node scripts/dev-server.js",
+    "sample-media": "node scripts/make-sample-media.js",
+    "simulate": "node scripts/simulate-phones.js",
+    "test": "node --test test/",
+    "dist:win": "electron-builder --win zip --x64"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4",
+    "ws": "8.18.3",
+    "yaml": "2.8.1"
+  },
+  "devDependencies": {
+    "electron": "38.8.6",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "cat.picots.gala",
+    "productName": "Gala Manager",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "show",
+        "to": "show",
+        "filter": [
+          "show.yaml"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

@@ -1,0 +1,117 @@
+PLA DE PROVES – Gala Manager (cicle 1: esquelet)
+================================================
+
+Proves automàtiques: `npm test` (23 tests: motor, guió i servidor). Aquest pla cobreix
+el que els tests no poden verificar (pantalles reals, xarxa, Windows) i, per a cada
+àrea automatitzada, només la prova manual mínima que la confirma en condicions reals.
+
+------------------------------------------------------------------------------
+T01 – Tests automàtics
+Purpose: Verificar la lògica del motor (GO/ENRERE/salts, votacions, empats, mà alçada,
+         recuperació del diari), la validació del guió i el servidor (Range, rutes
+         protegides, permisos per rol, recàrrega del guió, nova sessió).
+Method:  1. npm install
+         2. npm test
+Expected Result: "# pass 23" i "# fail 0".
+
+------------------------------------------------------------------------------
+T02 – Arrencada a Windows amb dues pantalles
+Purpose: Comprovar el paquet portable, la detecció de la segona pantalla i el vigilant.
+Method:  1. npm run dist:win; descomprimir el ZIP al portàtil Windows.
+         2. Copiar show/ (amb media/) al costat de "Gala Manager.exe".
+         3. Connectar el projector (mode "Ampliar") i executar l'exe.
+         4. Menú Projector > Moure a la pantalla següent (Ctrl+Shift+M) dues vegades.
+Expected Result: El panell s'obre al portàtil i el projector a pantalla completa a la 2a
+         pantalla amb el títol i el QR. Ctrl+Shift+M el mou entre pantalles. Es crea
+         dades\registres\gala-AAAA-MM-DD.log amb línies amb marca de temps.
+
+------------------------------------------------------------------------------
+T03 – Recorregut complet de l'espectacle d'exemple
+Purpose: Validar la reproducció real de vídeo amb so, les diapositives, la cadena de cues
+         i l'avançament automàtic (auto: true).
+Method:  1. npm run sample-media; npm start.
+         2. Prémer Espai a cada pas fins al final, seguint l'escaleta.
+Expected Result: benvinguda → cap1 (vídeo amb so, passa sol a vot1) → votació → branca →
+         records (5 fotos amb fos) → vot2 → final → fi. El botó GO sempre indica què farà.
+
+------------------------------------------------------------------------------
+T04 – Votació amb mòbils reals
+Purpose: Verificar QR, connexió per WiFi, vot, canvi de vot, avatars i compte enrere amb
+         dispositius reals (iOS i Android).
+Method:  1. Portàtil i mòbils al mateix router. Obrir el panell i anar a vot1.
+         2. Escanejar el QR del projector amb 3+ mòbils i triar noms diferents.
+         3. GO (obrir); votar; canviar el vot d'un mòbil; esperar el final del temps.
+Expected Result: Cada vot apareix al moment al panell i al projector (avatar que "salta").
+         El canvi de vot es reflecteix. En esgotar-se el temps es tanca sola, es marca la
+         guanyadora a tot arreu i GO porta a la branca correcta.
+
+------------------------------------------------------------------------------
+T05 – Càrrega amb 30 mòbils simulats
+Purpose: Comprovar que el servidor i el projector aguanten ràfegues de vots.
+Method:  1. npm start (o npm run dev-server).
+         2. npm run simulate -- --n=30 --delay=3   (cal que el guió tingui 30 participants)
+         3. Obrir una votació.
+Expected Result: Els 30 vots arriben en < 5 s, els recomptes són correctes i el panell
+         no s'alenteix.
+
+------------------------------------------------------------------------------
+T06 – Pla B: vot a mà alçada i empat per operador
+Purpose: Verificar que l'espectacle continua sense mòbils i que els empats es resolen.
+Method:  1. A vot1, sense obrir la votació, clicar "Mà alçada" a l'opció B. GO.
+         2. A vot2 (empat: operador), fer que 2 mòbils votin opcions diferents i tancar.
+Expected Result: (1) Va a cap2b, i el panell mostra "(mà alçada)". (2) El panell mostra
+         "EMPAT – tria el resultat", GO està desactivat fins a clicar "Forçar" en una opció.
+
+------------------------------------------------------------------------------
+T07 – Tornar enrere, saltar, reiniciar cue i repetir votació
+Purpose: Comprovar el control total del flux.
+Method:  1. Arribar a cap2a. Shift+← dues vegades.
+         2. Doble clic a "Records de P3". Shift+←.
+         3. A vot1 ja votada: "Reiniciar votació" (doble clic de confirmació) i tornar a votar.
+         4. A un vídeo: "REINICIAR CUE" (doble clic).
+Expected Result: (1) Torna a vot1 i després a cap1. (2) Salta i després torna a la cue des
+         d'on havia saltat. (3) Els vots s'esborren i es pot tornar a obrir. (4) El vídeo
+         torna a començar des de 0.
+
+------------------------------------------------------------------------------
+T08 – Recuperació després d'una caiguda
+Purpose: Verificar que tancar l'app de cop no perd l'estat ni la posició del vídeo.
+Method:  1. Començar cap1 i esperar uns 5 s. Matar el procés (Administrador de tasques).
+         2. Tornar a obrir l'app.
+Expected Result: Bàner groc "Sessió recuperada". La cue actual és cap1 i el vídeo es reprèn
+         a ±2 s d'on era. Els mòbils es reconnecten sols amb el mateix nom.
+
+------------------------------------------------------------------------------
+T09 – Botons de pànic
+Purpose: Verificar pantalla negra, d'espera i pausa al projector real.
+Method:  Durant un vídeo: N, N, E, Esc, P, P.
+Expected Result: N tapa la imatge (el so continua). E mostra la pantalla d'espera.
+         Esc ho treu tot. P atura i reprèn vídeo i música. L'estat actiu es ressalta al panell.
+
+------------------------------------------------------------------------------
+T10 – Mòbils: QR personal, alliberar i reconnexió
+Purpose: Verificar la identificació robusta dels nens.
+Method:  1. Panell > "QR" d'un nen; escanejar-lo amb un mòbil nou.
+         2. Escanejar el mateix QR personal amb un segon mòbil.
+         3. "Alliberar" un nen des del panell. Al mòbil, "No sóc jo" (doble toc).
+         4. Apagar el WiFi d'un mòbil 10 s i tornar-lo a encendre.
+Expected Result: (1) Entra directament com aquell nen, sense triar. (2) El segon mòbil passa
+         a ser el nen (el primer torna a "Qui ets?"). (3) Tots dos tornen a "Qui ets?".
+         (4) Surt "Connectant…" i després es recupera sol amb el mateix nom.
+
+------------------------------------------------------------------------------
+T11 – Edició del guió en calent
+Purpose: Verificar que el guió es pot modificar durant un assaig sense reiniciar.
+Method:  1. Amb l'app oberta, canviar el text d'una opció a show.yaml. "Recarregar guió".
+         2. Posar va_a: inexistent en una opció. "Recarregar guió".
+         3. Esborrar un vídeo referenciat i recarregar.
+Expected Result: (1) El canvi apareix al panell i al projector. (2) Avís d'error i es manté
+         el guió anterior. (3) Recàrrega rebutjada amb "No es troba el vídeo".
+
+------------------------------------------------------------------------------
+T12 – Seguretat de rols
+Purpose: Evitar que un mòbil controli l'espectacle.
+Method:  1. Des d'un mòbil, obrir http://<ip>:8080/control.
+         2. Definir xarxa.pin_control: "4321", recarregar l'app i obrir /control?pin=4321.
+Expected Result: (1) El panell surt "Desconnectat" (connexió rebutjada, apareix al registre).
+         (2) Amb el PIN, el panell funciona des de la tauleta.
